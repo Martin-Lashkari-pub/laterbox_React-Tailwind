@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "LaterBox",
-  "version": "3.0",
-  "description": "Save, organize, and schedule tabs and links with folder management and recurring reminders.",
-  "permissions": ["tabs", "storage", "alarms", "notifications"],
-  "host_permissions": ["<all_urls>"],
+  "name": "TabVault",
+  "version": "3.0.0",
+  "description": "Save, organize, and schedule tabs and links with encrypted password-protected folders and recurring reminders.",
+  "permissions": ["activeTab", "tabs", "storage", "alarms", "notifications"],
+  "host_permissions": ["https://www.youtube.com/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -15,6 +15,10 @@
   },
   "action": {
     "default_popup": "index.html",
-    "default_icon": "LaterBox-Ikon.png"
+    "default_icon": {
+      "16": "LaterBox-Ikon.png",
+      "48": "LaterBox-Ikon.png",
+      "128": "LaterBox-Ikon.png"
+    }
   }
 }

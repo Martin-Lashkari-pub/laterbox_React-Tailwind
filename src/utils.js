@@ -37,7 +37,7 @@ export function isValidUrl(raw) {
 }
 
 export const formatDomain = (u) =>
-  u
+  (u || "")
     .split("?")[0]
     .replace(/^https?:\/\/(www\.)?/, "")
     .replace(/\/$/, "");
@@ -181,6 +181,122 @@ export function playTone(sound = "chime", repeatCount = 1) {
   for (let i = 0; i < repeatCount; i++) setTimeout(playOnce, i * 550);
 }
 
+/* ============================================================================
+   WEB CRYPTO API PRIVATE SPACE ENGINE (PBKDF2-SHA256 + AES-256-GCM)
+   ============================================================================ */
+
+const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+const PBKDF2_ITERATIONS = 210000;
+
+export const vaultCrypto = {
+  async createLock(password) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits", "deriveKey"],
+    );
+
+    const bits = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+      keyMaterial,
+      512,
+    );
+
+    const aesRaw = bits.slice(0, 32);
+    const verifierRaw = bits.slice(32, 64);
+
+    const aesKey = await crypto.subtle.importKey(
+      "raw",
+      aesRaw,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"],
+    );
+
+    return {
+      lockMeta: {
+        salt: bufToB64(salt),
+        verifier: bufToB64(verifierRaw),
+        iterations: PBKDF2_ITERATIONS,
+      },
+      aesKey,
+    };
+  },
+
+  async unlock(password, lockMeta) {
+    const salt = b64ToBuf(lockMeta.salt);
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"],
+    );
+
+    const bits = await crypto.subtle.deriveBits(
+      {
+        name: "PBKDF2",
+        salt,
+        iterations: lockMeta.iterations || PBKDF2_ITERATIONS,
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      512,
+    );
+
+    const aesRaw = bits.slice(0, 32);
+    const verifierCandidate = new Uint8Array(bits.slice(32, 64));
+    const storedVerifier = b64ToBuf(lockMeta.verifier);
+
+    if (verifierCandidate.length !== storedVerifier.length) return null;
+    let diff = 0;
+    for (let i = 0; i < storedVerifier.length; i++) {
+      diff |= verifierCandidate[i] ^ storedVerifier[i];
+    }
+    if (diff !== 0) return null;
+
+    return crypto.subtle.importKey(
+      "raw",
+      aesRaw,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"],
+    );
+  },
+
+  async encryptPayload(aesKey, payloadObj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(JSON.stringify(payloadObj));
+    const cipherBuf = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      aesKey,
+      encoded,
+    );
+    return {
+      iv: bufToB64(iv),
+      data: bufToB64(cipherBuf),
+    };
+  },
+
+  async decryptPayload(aesKey, cipherObj) {
+    const iv = b64ToBuf(cipherObj.iv);
+    const data = b64ToBuf(cipherObj.data);
+    const plainBuf = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      aesKey,
+      data,
+    );
+    return JSON.parse(new TextDecoder().decode(plainBuf));
+  },
+};
+
 export function sanitizeItems(rawList) {
   if (!Array.isArray(rawList)) return [];
   const valid = rawList.filter(
@@ -205,6 +321,7 @@ export const storage = {
         "laterBoxBackup",
         "laterBoxPrefs",
         "laterBoxDraft",
+        "tabVaultPrivateMeta",
       ]);
       const primary = sanitizeItems(data.laterBoxItems);
       const backup = sanitizeItems(data.laterBoxBackup);
@@ -235,6 +352,7 @@ export const storage = {
         laterBoxItems: resolvedItems,
         laterBoxPrefs: data.laterBoxPrefs || null,
         laterBoxDraft: data.laterBoxDraft || null,
+        tabVaultPrivateMeta: data.tabVaultPrivateMeta || null,
       };
     }
 
@@ -247,6 +365,9 @@ export const storage = {
       ),
       laterBoxDraft: JSON.parse(
         localStorage.getItem("laterBoxDraft") || "null",
+      ),
+      tabVaultPrivateMeta: JSON.parse(
+        localStorage.getItem("tabVaultPrivateMeta") || "null",
       ),
     };
   },
@@ -270,6 +391,17 @@ export const storage = {
     } else {
       localStorage.setItem("laterBoxItems", JSON.stringify(clean));
       localStorage.setItem("laterBoxBackup", JSON.stringify(clean));
+    }
+  },
+
+  async savePrivateMeta(meta) {
+    if (typeof chrome !== "undefined" && chrome.storage?.local) {
+      if (meta) await chrome.storage.local.set({ tabVaultPrivateMeta: meta });
+      else await chrome.storage.local.remove("tabVaultPrivateMeta");
+    } else {
+      if (meta)
+        localStorage.setItem("tabVaultPrivateMeta", JSON.stringify(meta));
+      else localStorage.removeItem("tabVaultPrivateMeta");
     }
   },
 
