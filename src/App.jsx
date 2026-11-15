@@ -31,12 +31,18 @@ const CARD_BG = {
 };
 
 const SIZES = {
-  compact: { w: "370px", h: "490px" },
-  standard: { w: "420px", h: "560px" },
-  large: { w: "490px", h: "600px" },
+  compact: { w: 380, h: 500 },
+  standard: { w: 430, h: 560 },
+  large: { w: 500, h: 600 },
 };
 
-const FONTS = { small: "14px", normal: "16px", large: "18px" };
+const resolveFontScale = (fontPref) => {
+  if (typeof fontPref === "number" && fontPref >= 80 && fontPref <= 150)
+    return fontPref;
+  if (fontPref === "small") return 90;
+  if (fontPref === "large") return 115;
+  return 100;
+};
 
 const createDefaultRepeat = () => ({
   type: "none",
@@ -52,7 +58,7 @@ export default function App() {
   const [prefs, setPrefs] = useState({
     theme: "light",
     size: "standard",
-    font: "normal",
+    font: 100,
     sound: "chime",
   });
   const [storageReady, setStorageReady] = useState(false);
@@ -68,13 +74,11 @@ export default function App() {
   const [shakeForm, setShakeForm] = useState(false);
   const [dragId, setDragId] = useState(null);
 
-  // Quick capture states
   const [urlInput, setUrlInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [useReminder, setUseReminder] = useState(false);
   const [repeatCfg, setRepeatCfg] = useState(createDefaultRepeat);
 
-  // Full link/reminder editor states
   const [editingItemId, setEditingItemId] = useState(null);
   const [editUrl, setEditUrl] = useState("");
   const [editNote, setEditNote] = useState("");
@@ -82,13 +86,11 @@ export default function App() {
   const [editUseReminder, setEditUseReminder] = useState(false);
   const [editRepeatCfg, setEditRepeatCfg] = useState(createDefaultRepeat);
 
-  // Inline folder create & rename states
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [renamingFolderId, setRenamingFolderId] = useState(null);
   const [renameFolderVal, setRenameFolderVal] = useState("");
 
-  // Calendar states
   const [calMonth, setCalMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
@@ -182,10 +184,16 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    const dim = SIZES[prefs.size] || SIZES.standard;
-    document.documentElement.style.width = dim.w;
-    document.documentElement.style.height = dim.h;
-    document.documentElement.style.fontSize = FONTS[prefs.font] || FONTS.normal;
+    const base = SIZES[prefs.size] || SIZES.standard;
+    const scalePct = resolveFontScale(prefs.font);
+    const scaleFactor = Math.max(1, scalePct / 100);
+
+    const scaledWidth = Math.min(780, Math.round(base.w * scaleFactor));
+    const scaledHeight = Math.min(600, Math.round(base.h * scaleFactor));
+
+    document.documentElement.style.width = `${scaledWidth}px`;
+    document.documentElement.style.height = `${scaledHeight}px`;
+    document.documentElement.style.fontSize = `${(16 * scalePct) / 100}px`;
   }, [prefs]);
 
   useEffect(() => {
@@ -670,6 +678,7 @@ export default function App() {
   const hasUnsavedDraft = Boolean(
     urlInput.trim() || noteInput.trim() || useReminder || calAddOpen,
   );
+  const currentFontScale = resolveFontScale(prefs.font);
 
   const renderLinkRow = (item, draggable = false, showFolderTag = false) => {
     const isDue =
@@ -683,7 +692,7 @@ export default function App() {
         key={item.id}
         draggable={draggable}
         onDragStart={() => setDragId(item.id)}
-        className={`flex items-center justify-between gap-2 p-2 mb-1.5 rounded-lg border ${CARD_BG[prefs.theme]} ${
+        className={`flex items-center justify-between gap-2 p-2.5 mb-2 rounded-lg border ${CARD_BG[prefs.theme]} ${
           isDue ? "border-l-4 border-l-red-500" : ""
         }`}
       >
@@ -713,22 +722,22 @@ export default function App() {
                   ? "Fetching title..."
                   : formatDomain(item.url))}
             </a>
-            <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px] opacity-75">
+            <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs opacity-85">
               {item.reminderTime && !item.dismissed && (
                 <span
-                  className={`px-1.5 py-0.2 rounded font-semibold ${isDue ? "bg-red-500/15 text-red-500" : "bg-emerald-500/15 text-emerald-600"}`}
+                  className={`px-1.5 py-0.5 rounded font-semibold ${isDue ? "bg-red-500/15 text-red-500" : "bg-emerald-500/15 text-emerald-600"}`}
                 >
                   {isDue ? "DUE · " : ""}
                   {formatReminderTime(item.reminderTime)}
                 </span>
               )}
               {repeatTxt && (
-                <span className="px-1.5 py-0.2 rounded bg-current/10 font-medium">
+                <span className="px-1.5 py-0.5 rounded bg-current/10 font-medium">
                   ↻ {repeatTxt}
                 </span>
               )}
               {folderLabel && (
-                <span className="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-600 font-medium">
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 font-medium">
                   📁 {folderLabel}
                 </span>
               )}
@@ -742,11 +751,15 @@ export default function App() {
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => toggleFavorite(item)}
+            aria-label={
+              item.favorite ? "Remove from favorites" : "Add to favorites"
+            }
+            aria-pressed={Boolean(item.favorite)}
             title={item.favorite ? "Remove from favorites" : "Add to favorites"}
-            className={`px-1.5 py-1 text-xs rounded border border-current/15 transition ${
+            className={`px-2 py-1 text-xs rounded border border-current/20 transition ${
               item.favorite
                 ? "text-amber-500 border-amber-500/40 bg-amber-500/10"
-                : "opacity-55 hover:opacity-100"
+                : "opacity-75 hover:opacity-100"
             }`}
           >
             {item.favorite ? "★" : "☆"}
@@ -757,20 +770,22 @@ export default function App() {
                 setDetailItemId(item.id);
                 setView("detail");
               }}
-              className="px-2 py-1 text-[10px] font-bold rounded bg-emerald-600 text-white"
+              className="px-2 py-1 text-xs font-bold rounded bg-emerald-600 text-white"
             >
               View
             </button>
           )}
           <button
             onClick={() => openEditor(item)}
-            className="px-1.5 py-1 text-[10px] font-semibold rounded border border-current/15 opacity-75 hover:opacity-100 hover:border-emerald-500"
+            aria-label={`Edit ${item.note || formatDomain(item.url)}`}
+            className="px-2 py-1 text-xs font-semibold rounded border border-current/20 opacity-85 hover:opacity-100 hover:border-emerald-500"
           >
             Edit
           </button>
           <button
             onClick={() => deleteItem(item.id)}
-            className="px-1.5 py-1 text-[10px] font-semibold rounded border border-current/15 hover:bg-red-500/15 hover:text-red-500"
+            aria-label={`Delete ${item.note || formatDomain(item.url)}`}
+            className="px-2 py-1 text-xs font-semibold rounded border border-current/20 hover:bg-red-500/15 hover:text-red-500"
           >
             Del
           </button>
@@ -797,7 +812,7 @@ export default function App() {
           >
             ← Cancel
           </button>
-          <span className="text-xs font-bold uppercase tracking-wider opacity-60">
+          <span className="text-xs font-bold uppercase tracking-wider opacity-75">
             Edit Link &amp; Reminder
           </span>
         </div>
@@ -808,7 +823,7 @@ export default function App() {
           <div
             className={`p-3 rounded-xl border space-y-2.5 ${CARD_BG[prefs.theme]}`}
           >
-            <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-wider opacity-70">
+            <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider opacity-80">
               Title / Note
               <input
                 type="text"
@@ -820,7 +835,7 @@ export default function App() {
               />
             </label>
 
-            <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-wider opacity-70">
+            <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider opacity-80">
               Website URL
               <input
                 type="text"
@@ -835,13 +850,13 @@ export default function App() {
               />
             </label>
             {isEditUrlInvalid && (
-              <div className="text-[11px] text-red-500 font-medium">
+              <div role="alert" className="text-xs text-red-500 font-medium">
                 ⚠️ Enter a valid web link (must include a domain like .com or
                 .se)
               </div>
             )}
 
-            <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-wider opacity-70">
+            <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider opacity-80">
               Folder
               <select
                 value={editParentId}
@@ -878,7 +893,7 @@ export default function App() {
             {editUseReminder ? (
               <RepeatPicker value={editRepeatCfg} onChange={setEditRepeatCfg} />
             ) : (
-              <div className="text-[11px] opacity-60">
+              <div className="text-xs opacity-75">
                 No reminder active. Enable the toggle above to schedule an
                 alert.
               </div>
@@ -908,7 +923,9 @@ export default function App() {
 
         {toast.msg && (
           <div
-            className={`absolute bottom-3 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full text-white text-[11px] font-semibold shadow-lg whitespace-nowrap ${
+            role="status"
+            aria-live="polite"
+            className={`absolute bottom-3 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full text-white text-xs font-semibold shadow-lg whitespace-nowrap ${
               toast.error ? "bg-red-600" : "bg-slate-900"
             }`}
           >
@@ -921,9 +938,11 @@ export default function App() {
 
   if (view === "settings") {
     return (
-      <div className={`w-full h-full flex flex-col ${THEMES[prefs.theme]}`}>
+      <div
+        className={`w-full h-full flex flex-col relative ${THEMES[prefs.theme]}`}
+      >
         <div
-          className={`flex items-center justify-between px-3.5 py-2.5 border-b ${CARD_BG[prefs.theme]}`}
+          className={`flex items-center justify-between px-3.5 py-2.5 border-b shrink-0 ${CARD_BG[prefs.theme]}`}
         >
           <button
             onClick={() => setView("home")}
@@ -931,7 +950,7 @@ export default function App() {
           >
             ← Back to Home
           </button>
-          <span className="text-xs font-bold uppercase tracking-wider opacity-60">
+          <span className="text-xs font-bold uppercase tracking-wider opacity-75">
             Settings
           </span>
         </div>
@@ -948,31 +967,26 @@ export default function App() {
               key: "size",
               opts: ["compact", "standard", "large"],
             },
-            {
-              label: "Text Scale",
-              key: "font",
-              opts: ["small", "normal", "large"],
-            },
-            {
-              label: "Alert Sound",
-              key: "sound",
-              opts: ["chime", "bell", "pulse", "mute"],
-            },
           ].map((group) => (
             <div
               key={group.key}
               className={`p-3 rounded-xl border ${CARD_BG[prefs.theme]}`}
             >
               <div className="text-xs font-bold mb-2">{group.label}</div>
-              <div className="grid grid-flow-col auto-cols-fr gap-1 bg-black/10 p-1 rounded-lg">
+              <div
+                role="group"
+                aria-label={group.label}
+                className="grid grid-flow-col auto-cols-fr gap-1 bg-black/10 p-1 rounded-lg"
+              >
                 {group.opts.map((opt) => (
                   <button
                     key={opt}
+                    aria-pressed={prefs[group.key] === opt}
                     onClick={() => updatePref(group.key, opt)}
                     className={`py-1.5 text-xs font-semibold capitalize rounded-md ${
                       prefs[group.key] === opt
                         ? "bg-emerald-600 text-white"
-                        : "opacity-70 hover:opacity-100"
+                        : "opacity-80 hover:opacity-100"
                     }`}
                   >
                     {opt}
@@ -982,11 +996,122 @@ export default function App() {
             </div>
           ))}
 
+          {/* Alert Sound + Integrated Test Alert & Sound button */}
+          <div
+            className={`p-3 rounded-xl border space-y-2.5 ${CARD_BG[prefs.theme]}`}
+          >
+            <div className="text-xs font-bold">Alert Sound</div>
+            <div
+              role="group"
+              aria-label="Alert Sound"
+              className="grid grid-flow-col auto-cols-fr gap-1 bg-black/10 p-1 rounded-lg"
+            >
+              {["chime", "bell", "pulse", "mute"].map((opt) => (
+                <button
+                  key={opt}
+                  aria-pressed={prefs.sound === opt}
+                  onClick={() => updatePref("sound", opt)}
+                  className={`py-1.5 text-xs font-semibold capitalize rounded-md ${
+                    prefs.sound === opt
+                      ? "bg-emerald-600 text-white"
+                      : "opacity-80 hover:opacity-100"
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                playTone(prefs.sound, 2);
+                chrome?.notifications?.create(`test_${Date.now()}`, {
+                  type: "basic",
+                  iconUrl: "LaterBox-Ikon.png",
+                  title: "LaterBox Test Alert",
+                  message: `Sound mode: ${prefs.sound}`,
+                });
+                notify("Test alert sent");
+              }}
+              className="w-full py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition"
+            >
+              Test Alert &amp; Sound
+            </button>
+          </div>
+
+          <div
+            className={`p-3 rounded-xl border space-y-2.5 ${CARD_BG[prefs.theme]}`}
+          >
+            <div className="flex items-center justify-between">
+              <label htmlFor="text-scale-slider" className="text-xs font-bold">
+                Text Size
+              </label>
+              <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-600/15 text-emerald-600">
+                {currentFontScale}%
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Decrease text size"
+                onClick={() =>
+                  updatePref("font", Math.max(85, currentFontScale - 5))
+                }
+                className="px-2.5 py-1 rounded border border-current/20 text-xs font-bold hover:border-emerald-500"
+              >
+                A-
+              </button>
+              <input
+                id="text-scale-slider"
+                type="range"
+                min="85"
+                max="140"
+                step="5"
+                value={currentFontScale}
+                onChange={(e) => updatePref("font", Number(e.target.value))}
+                className="flex-1 accent-emerald-600 cursor-pointer"
+              />
+              <button
+                type="button"
+                aria-label="Increase text size"
+                onClick={() =>
+                  updatePref("font", Math.min(140, currentFontScale + 5))
+                }
+                className="px-2.5 py-1 rounded border border-current/20 text-xs font-bold hover:border-emerald-500"
+              >
+                A+
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 gap-1 bg-black/10 p-1 rounded-lg">
+              {[
+                { label: "85%", val: 85 },
+                { label: "100%", val: 100 },
+                { label: "120%", val: 120 },
+                { label: "140%", val: 140 },
+              ].map((preset) => (
+                <button
+                  key={preset.val}
+                  type="button"
+                  aria-pressed={currentFontScale === preset.val}
+                  onClick={() => updatePref("font", preset.val)}
+                  className={`py-1 text-xs font-semibold rounded-md ${
+                    currentFontScale === preset.val
+                      ? "bg-emerald-600 text-white"
+                      : "opacity-80 hover:opacity-100"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div
             className={`p-3 rounded-xl border space-y-2 ${CARD_BG[prefs.theme]}`}
           >
             <div className="text-xs font-bold">Data &amp; Backup</div>
-            <div className="text-[11px] opacity-65">
+            <div className="text-xs opacity-75">
               {items.filter((i) => i.type === "folder").length} folders ·{" "}
               {items.filter((i) => i.type === "link").length} links stored
               safely
@@ -1013,23 +1138,19 @@ export default function App() {
               />
             </div>
           </div>
-
-          <button
-            onClick={() => {
-              playTone(prefs.sound, 2);
-              chrome?.notifications?.create(`test_${Date.now()}`, {
-                type: "basic",
-                iconUrl: "LaterBox-Ikon.png",
-                title: "LaterBox Test Alert",
-                message: `Sound mode: ${prefs.sound}`,
-              });
-              notify("Test alert sent");
-            }}
-            className="w-full py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold"
-          >
-            Send Test Alert &amp; Sound
-          </button>
         </div>
+
+        {toast.msg && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`absolute bottom-3 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full text-white text-xs font-semibold shadow-lg whitespace-nowrap ${
+              toast.error ? "bg-red-600" : "bg-slate-900"
+            }`}
+          >
+            {toast.error ? `⚠️ ${toast.msg}` : toast.msg}
+          </div>
+        )}
       </div>
     );
   }
@@ -1047,7 +1168,7 @@ export default function App() {
           >
             ← Back to Home
           </button>
-          <span className="text-xs font-bold uppercase tracking-wider opacity-60">
+          <span className="text-xs font-bold uppercase tracking-wider opacity-75">
             Reminder
           </span>
         </div>
@@ -1056,11 +1177,11 @@ export default function App() {
           <div
             className={`p-3.5 rounded-xl border border-t-4 border-t-emerald-600 space-y-2.5 ${CARD_BG[prefs.theme]}`}
           >
-            <div className="flex justify-between items-center text-[11px]">
+            <div className="flex justify-between items-center text-xs">
               <span className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-500 font-bold uppercase">
                 Reminder Due
               </span>
-              <span className="opacity-70 font-semibold">
+              <span className="opacity-80 font-semibold">
                 {formatReminderTime(detailItem.reminderTime)}
               </span>
             </div>
@@ -1075,7 +1196,7 @@ export default function App() {
               {detailItem.note || formatDomain(detailItem.url)}
             </h2>
             {formatRepeatLabel(detailItem.repeat) && (
-              <div className="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">
+              <div className="inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">
                 ↻ {formatRepeatLabel(detailItem.repeat)}
               </div>
             )}
@@ -1131,7 +1252,7 @@ export default function App() {
           </div>
 
           <div>
-            <div className="text-[10px] font-bold uppercase opacity-60 mb-1.5">
+            <div className="text-xs font-bold uppercase opacity-75 mb-1.5">
               Snooze
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -1213,21 +1334,24 @@ export default function App() {
       className={`w-full h-full flex flex-col relative ${THEMES[prefs.theme]}`}
     >
       <header
-        className={`flex items-center justify-between px-3.5 py-2.5 border-b shrink-0 ${CARD_BG[prefs.theme]}`}
+        className={`flex items-center justify-between gap-2 px-3.5 py-2.5 border-b shrink-0 ${CARD_BG[prefs.theme]}`}
       >
         <button
           onClick={() => setView("home")}
-          className="flex items-center gap-2 font-bold text-sm hover:text-emerald-600"
+          className="flex items-center gap-2 font-bold text-sm hover:text-emerald-600 shrink-0"
         >
           <img
             src="LaterBox-Ikon.png"
             alt="LaterBox"
-            className="w-5 h-5 rounded"
+            className="w-5 h-5 rounded shrink-0"
           />
           <span>LaterBox</span>
         </button>
-        <div className="flex items-center gap-1.5">
-          <div className="flex bg-black/10 p-0.5 rounded-lg">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <nav
+            aria-label="Main navigation"
+            className="flex bg-black/10 p-0.5 rounded-lg"
+          >
             {[
               { id: "home", label: "Home" },
               { id: "links", label: "Links" },
@@ -1236,23 +1360,25 @@ export default function App() {
             ].map((tab) => (
               <button
                 key={tab.id}
+                aria-current={view === tab.id ? "page" : undefined}
                 onClick={() => {
                   if (tab.id === "links") setLinkFilter("all");
                   setView(tab.id);
                 }}
-                className={`px-2 py-1 rounded-md text-[11px] font-semibold ${
+                className={`px-2 py-1 rounded-md text-xs font-semibold ${
                   view === tab.id
                     ? "bg-emerald-600 text-white"
-                    : "opacity-70 hover:opacity-100"
+                    : "opacity-80 hover:opacity-100"
                 }`}
               >
                 {tab.label}
               </button>
             ))}
-          </div>
+          </nav>
           <button
             onClick={() => setView("settings")}
-            className="p-1.5 rounded-lg border border-current/15 opacity-75 hover:opacity-100"
+            aria-label="Open settings"
+            className="p-1.5 rounded-lg border border-current/20 opacity-85 hover:opacity-100"
             title="Settings"
           >
             ⚙
@@ -1261,12 +1387,15 @@ export default function App() {
       </header>
 
       {dueItem && (
-        <div className="flex items-center justify-between gap-2 px-3.5 py-2 bg-red-600 text-white shrink-0">
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 px-3.5 py-2 bg-red-600 text-white shrink-0"
+        >
           <div className="min-w-0">
             <div className="text-xs font-bold truncate">
               {dueItem.note || "Reminder Due"}
             </div>
-            <div className="text-[10px] opacity-90 truncate">
+            <div className="text-xs opacity-95 truncate">
               {formatDomain(dueItem.url)}
             </div>
           </div>
@@ -1276,13 +1405,13 @@ export default function App() {
                 setDetailItemId(dueItem.id);
                 setView("detail");
               }}
-              className="px-2.5 py-1 bg-white text-slate-900 rounded text-[11px] font-bold"
+              className="px-2.5 py-1 bg-white text-slate-900 rounded text-xs font-bold"
             >
               Open
             </button>
             <button
               onClick={() => advanceOrDismiss(dueItem)}
-              className="px-2 py-1 bg-white/20 rounded text-[11px] font-semibold"
+              className="px-2 py-1 bg-white/20 rounded text-xs font-semibold"
             >
               Dismiss
             </button>
@@ -1298,7 +1427,7 @@ export default function App() {
           >
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">
+                <span className="text-xs font-bold uppercase tracking-wider opacity-75">
                   Quick Capture
                 </span>
                 {hasUnsavedDraft && (
@@ -1307,7 +1436,7 @@ export default function App() {
                       await resetFormAndDraft();
                       notify("Draft cleared");
                     }}
-                    className="text-[10px] font-semibold text-amber-600 hover:underline"
+                    className="text-xs font-semibold text-amber-600 hover:underline"
                   >
                     Clear draft
                   </button>
@@ -1315,13 +1444,14 @@ export default function App() {
               </div>
               <button
                 onClick={() => saveCurrentTab(false, null)}
-                className="text-[11px] font-bold px-2.5 py-1 rounded bg-emerald-600/15 text-emerald-600 hover:bg-emerald-600/25"
+                className="text-xs font-bold px-2.5 py-1 rounded bg-emerald-600/15 text-emerald-600 hover:bg-emerald-600/25"
               >
                 + Save Current Tab
               </button>
             </div>
             <div className="flex gap-1.5">
               <input
+                aria-label="Website URL"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 placeholder="Paste a URL (e.g. youtube.com)..."
@@ -1346,12 +1476,13 @@ export default function App() {
               </button>
             </div>
             {isUrlInvalid && (
-              <div className="text-[11px] text-red-500 font-medium">
+              <div role="alert" className="text-xs text-red-500 font-medium">
                 ⚠️ Enter a valid web link (must include a domain like .com or
                 .se)
               </div>
             )}
             <input
+              aria-label="Title or note"
               value={noteInput}
               onChange={(e) => setNoteInput(e.target.value)}
               placeholder="Optional title or note (auto-detected if empty)..."
@@ -1382,7 +1513,7 @@ export default function App() {
                   <button
                     onClick={() => saveCurrentTab(true, null)}
                     disabled={isHomePast}
-                    className={`py-1.5 rounded-lg text-[11px] font-bold transition ${
+                    className={`py-1.5 rounded-lg text-xs font-bold transition ${
                       isHomePast
                         ? "bg-slate-200 text-slate-400 cursor-not-allowed"
                         : "bg-emerald-600/15 text-emerald-600 hover:bg-emerald-600/25"
@@ -1395,7 +1526,7 @@ export default function App() {
                       saveLink({ rawUrl: urlInput, withSchedule: true })
                     }
                     disabled={isHomePast || !urlInput.trim() || isUrlInvalid}
-                    className={`py-1.5 rounded-lg text-[11px] font-bold transition ${
+                    className={`py-1.5 rounded-lg text-xs font-bold transition ${
                       isHomePast || !urlInput.trim() || isUrlInvalid
                         ? "bg-slate-400 text-white cursor-not-allowed"
                         : "bg-emerald-600 text-white"
@@ -1444,7 +1575,7 @@ export default function App() {
                   <div className={`text-base font-bold ${s.accent}`}>
                     {s.count}
                   </div>
-                  <div className="text-[10px] font-semibold opacity-65">
+                  <div className="text-xs font-semibold opacity-80">
                     {s.label}
                   </div>
                 </button>
@@ -1453,19 +1584,19 @@ export default function App() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">
+                <span className="text-xs font-bold uppercase tracking-wider opacity-75">
                   Upcoming Reminders
                 </span>
                 <button
                   onClick={() => setView("calendar")}
-                  className="text-[11px] font-semibold text-emerald-600 hover:underline"
+                  className="text-xs font-semibold text-emerald-600 hover:underline"
                 >
                   Calendar ({upcomingReminders.length}) →
                 </button>
               </div>
               {upcomingReminders.length === 0 ? (
                 <div
-                  className={`p-4 rounded-xl border text-center text-xs opacity-60 ${CARD_BG[prefs.theme]}`}
+                  className={`p-4 rounded-xl border text-center text-xs opacity-75 ${CARD_BG[prefs.theme]}`}
                 >
                   No upcoming reminders scheduled.
                 </div>
@@ -1486,9 +1617,10 @@ export default function App() {
             className={`p-3 border-b space-y-2 shrink-0 ${CARD_BG[prefs.theme]}`}
           >
             <div className="relative flex items-center">
-              <span className="absolute left-2.5 text-xs opacity-50">🔍</span>
+              <span className="absolute left-2.5 text-xs opacity-65">🔍</span>
               <input
                 type="text"
+                aria-label="Search links by title or URL"
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -1498,7 +1630,8 @@ export default function App() {
               {search && (
                 <button
                   onClick={() => setSearch("")}
-                  className="absolute right-2 text-xs opacity-60 hover:opacity-100 px-1"
+                  aria-label="Clear search"
+                  className="absolute right-2 text-xs opacity-75 hover:opacity-100 px-1"
                   title="Clear search"
                 >
                   ✕
@@ -1507,7 +1640,11 @@ export default function App() {
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <div className="flex gap-1 bg-black/10 p-0.5 rounded-lg">
+              <div
+                role="group"
+                aria-label="Filter links"
+                className="flex flex-wrap gap-1 bg-black/10 p-0.5 rounded-lg"
+              >
                 {[
                   { id: "all", label: "All" },
                   { id: "favorites", label: "★ Favorites" },
@@ -1516,18 +1653,19 @@ export default function App() {
                 ].map((f) => (
                   <button
                     key={f.id}
+                    aria-pressed={linkFilter === f.id}
                     onClick={() => setLinkFilter(f.id)}
-                    className={`px-2 py-1 rounded-md text-[10px] font-semibold ${
+                    className={`px-2 py-1 rounded-md text-xs font-semibold ${
                       linkFilter === f.id
                         ? "bg-emerald-600 text-white"
-                        : "opacity-70 hover:opacity-100"
+                        : "opacity-80 hover:opacity-100"
                     }`}
                   >
                     {f.label}
                   </button>
                 ))}
               </div>
-              <span className="text-[11px] font-semibold opacity-60 shrink-0">
+              <span className="text-xs font-semibold opacity-75 shrink-0">
                 {searchedLinks.length}
               </span>
             </div>
@@ -1535,7 +1673,7 @@ export default function App() {
 
           <ul className="flex-1 overflow-y-auto p-3">
             {searchedLinks.length === 0 ? (
-              <li className="text-center text-xs opacity-60 py-10">
+              <li className="text-center text-xs opacity-75 py-10">
                 {search.trim()
                   ? `No links matching "${search.trim()}"`
                   : linkFilter === "favorites"
@@ -1549,16 +1687,17 @@ export default function App() {
         </>
       )}
 
-      {/* FOLDERS VIEW — Inline Create & Inline Rename (Zero Browser Prompts) */}
+      {/* FOLDERS VIEW */}
       {view === "folders" && (
         <>
           <section
             className={`p-2.5 border-b space-y-2 shrink-0 ${CARD_BG[prefs.theme]} ${shakeForm ? "animate-shake" : ""}`}
           >
             <div className="relative flex items-center">
-              <span className="absolute left-2.5 text-xs opacity-50">🔍</span>
+              <span className="absolute left-2.5 text-xs opacity-65">🔍</span>
               <input
                 type="text"
+                aria-label="Search folders by name"
                 value={folderSearch}
                 onChange={(e) => setFolderSearch(e.target.value)}
                 placeholder="Search folders by name..."
@@ -1567,7 +1706,8 @@ export default function App() {
               {folderSearch && (
                 <button
                   onClick={() => setFolderSearch("")}
-                  className="absolute right-2 text-xs opacity-60 hover:opacity-100 px-1"
+                  aria-label="Clear folder search"
+                  className="absolute right-2 text-xs opacity-75 hover:opacity-100 px-1"
                   title="Clear folder search"
                 >
                   ✕
@@ -1579,6 +1719,7 @@ export default function App() {
               <>
                 <div className="flex gap-1.5">
                   <input
+                    aria-label="Save URL into this folder"
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
                     placeholder="Save URL into this folder..."
@@ -1609,7 +1750,10 @@ export default function App() {
                   </button>
                 </div>
                 {isUrlInvalid && (
-                  <div className="text-[11px] text-red-500 font-medium">
+                  <div
+                    role="alert"
+                    className="text-xs text-red-500 font-medium"
+                  >
                     ⚠️ Enter a valid web link (e.g. github.com)
                   </div>
                 )}
@@ -1619,11 +1763,11 @@ export default function App() {
 
           {folderSearch.trim() ? (
             <ul className="flex-1 overflow-y-auto p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-2">
+              <div className="text-xs font-bold uppercase tracking-wider opacity-75 mb-2">
                 Matching Folders ({matchingFolders.length})
               </div>
               {matchingFolders.length === 0 ? (
-                <li className="text-center text-xs opacity-60 py-8">
+                <li className="text-center text-xs opacity-75 py-8">
                   No folders matching "{folderSearch.trim()}"
                 </li>
               ) : (
@@ -1649,7 +1793,7 @@ export default function App() {
                           <div className="text-xs font-semibold truncate">
                             {folder.name}
                           </div>
-                          <div className="text-[10px] opacity-60 truncate">
+                          <div className="text-xs opacity-75 truncate">
                             {path ? `Root / ${path}` : "Root"} · {childCount}{" "}
                             {childCount === 1 ? "item" : "items"}
                           </div>
@@ -1660,7 +1804,7 @@ export default function App() {
                           setFolderId(folder.id);
                           setFolderSearch("");
                         }}
-                        className="px-2 py-1 rounded bg-emerald-600/15 text-emerald-600 text-[10px] font-bold shrink-0"
+                        className="px-2.5 py-1 rounded bg-emerald-600/15 text-emerald-600 text-xs font-bold shrink-0"
                       >
                         Open
                       </button>
@@ -1672,7 +1816,10 @@ export default function App() {
           ) : (
             <>
               <div className="flex items-center justify-between px-3.5 py-2 border-b border-current/10 text-xs shrink-0">
-                <div className="flex items-center gap-1 overflow-x-auto font-semibold">
+                <nav
+                  aria-label="Folder breadcrumbs"
+                  className="flex items-center gap-1 overflow-x-auto font-semibold"
+                >
                   <button
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() =>
@@ -1690,7 +1837,7 @@ export default function App() {
                   </button>
                   {breadcrumbs.map((f) => (
                     <span key={f.id} className="flex items-center gap-1">
-                      <span className="opacity-40">/</span>
+                      <span className="opacity-55">/</span>
                       <button
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() =>
@@ -1709,14 +1856,14 @@ export default function App() {
                       </button>
                     </span>
                   ))}
-                </div>
+                </nav>
                 <div className="flex gap-1.5 shrink-0">
                   <button
                     onClick={() => {
                       setCreatingFolder(true);
                       setNewFolderName("");
                     }}
-                    className="px-2 py-1 rounded border border-current/20 text-[11px] font-semibold hover:border-emerald-500"
+                    className="px-2.5 py-1 rounded border border-current/20 text-xs font-semibold hover:border-emerald-500"
                   >
                     + Folder
                   </button>
@@ -1730,6 +1877,7 @@ export default function App() {
                   <span className="text-xs">📁</span>
                   <input
                     type="text"
+                    aria-label="New folder name"
                     autoFocus
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
@@ -1743,7 +1891,7 @@ export default function App() {
                   <button
                     onClick={handleCreateFolder}
                     disabled={!newFolderName.trim()}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold ${
+                    className={`px-2.5 py-1 rounded text-xs font-bold ${
                       newFolderName.trim()
                         ? "bg-emerald-600 text-white"
                         : "bg-slate-400 text-white cursor-not-allowed"
@@ -1753,7 +1901,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => setCreatingFolder(false)}
-                    className="px-2 py-1 rounded border border-current/20 text-[11px] font-semibold opacity-75 hover:opacity-100"
+                    className="px-2 py-1 rounded border border-current/20 text-xs font-semibold opacity-80 hover:opacity-100"
                   >
                     Cancel
                   </button>
@@ -1762,7 +1910,7 @@ export default function App() {
 
               <ul className="flex-1 overflow-y-auto p-3">
                 {folderChildren.length === 0 && !creatingFolder && (
-                  <li className="text-center text-xs opacity-60 py-8">
+                  <li className="text-center text-xs opacity-75 py-8">
                     Folder is empty.
                   </li>
                 )}
@@ -1789,6 +1937,7 @@ export default function App() {
                           <span className="text-xs">📁</span>
                           <input
                             type="text"
+                            aria-label="Rename folder"
                             autoFocus
                             value={renameFolderVal}
                             onChange={(e) => setRenameFolderVal(e.target.value)}
@@ -1802,13 +1951,13 @@ export default function App() {
                           <button
                             onClick={() => handleRenameFolder(item.id)}
                             disabled={!renameFolderVal.trim()}
-                            className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold"
+                            className="px-2 py-0.5 rounded bg-emerald-600 text-white text-xs font-bold"
                           >
                             Save
                           </button>
                           <button
                             onClick={() => setRenamingFolderId(null)}
-                            className="px-2 py-0.5 rounded border border-current/20 text-[10px] font-semibold"
+                            className="px-2 py-0.5 rounded border border-current/20 text-xs font-semibold"
                           >
                             Cancel
                           </button>
@@ -1828,13 +1977,13 @@ export default function App() {
                                 setRenamingFolderId(item.id);
                                 setRenameFolderVal(item.name);
                               }}
-                              className="text-[10px] px-2 py-0.5 rounded border border-current/15 opacity-75 hover:opacity-100 hover:border-emerald-500"
+                              className="text-xs px-2 py-0.5 rounded border border-current/20 opacity-85 hover:opacity-100 hover:border-emerald-500"
                             >
                               Rename
                             </button>
                             <button
                               onClick={() => deleteItem(item.id)}
-                              className="text-[10px] px-2 py-0.5 rounded border border-current/15 hover:text-red-500"
+                              className="text-xs px-2 py-0.5 rounded border border-current/20 hover:text-red-500"
                             >
                               Delete
                             </button>
@@ -1852,13 +2001,14 @@ export default function App() {
         </>
       )}
 
-      {/* CALENDAR VIEW — Single unified scrollable container */}
+      {/* CALENDAR VIEW */}
       {view === "calendar" && (
         <div className="flex-1 overflow-y-auto">
           {!(calAddOpen && repeatCfg.type === "weekly") && (
             <div className={`px-3.5 py-2 border-b ${CARD_BG[prefs.theme]}`}>
               <div className="flex items-center justify-between mb-1.5">
                 <button
+                  aria-label="Previous month"
                   onClick={() =>
                     setCalMonth(
                       new Date(
@@ -1868,7 +2018,7 @@ export default function App() {
                       ),
                     )
                   }
-                  className="px-2 py-0.5 rounded border border-current/15"
+                  className="px-2.5 py-0.5 rounded border border-current/20"
                 >
                   ‹
                 </button>
@@ -1879,6 +2029,7 @@ export default function App() {
                   })}
                 </span>
                 <button
+                  aria-label="Next month"
                   onClick={() =>
                     setCalMonth(
                       new Date(
@@ -1888,12 +2039,12 @@ export default function App() {
                       ),
                     )
                   }
-                  className="px-2 py-0.5 rounded border border-current/15"
+                  className="px-2.5 py-0.5 rounded border border-current/20"
                 >
                   ›
                 </button>
               </div>
-              <div className="grid grid-cols-7 text-center text-[10px] font-bold opacity-55 mb-1">
+              <div className="grid grid-cols-7 text-center text-xs font-bold opacity-75 mb-1">
                 {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
                   <span key={d}>{d}</span>
                 ))}
@@ -1918,6 +2069,8 @@ export default function App() {
                       <button
                         key={key}
                         disabled={isBlocked}
+                        aria-label={key}
+                        aria-pressed={isSelected}
                         onClick={() => {
                           if (isBlocked) return;
                           setSelectedDate(key);
@@ -1948,9 +2101,9 @@ export default function App() {
                             }));
                           }
                         }}
-                        className={`h-7 rounded text-xs font-medium relative flex items-center justify-center transition ${
+                        className={`h-8 rounded text-xs font-medium relative flex items-center justify-center transition ${
                           isBlocked
-                            ? "opacity-25 cursor-not-allowed line-through"
+                            ? "opacity-30 cursor-not-allowed line-through"
                             : isSelected
                               ? "bg-emerald-600 text-white font-bold"
                               : key === todayKey
@@ -1961,7 +2114,7 @@ export default function App() {
                         {day}
                         {hasItems && (
                           <span
-                            className={`w-1 h-1 rounded-full absolute bottom-1 ${
+                            className={`w-1.5 h-1.5 rounded-full absolute bottom-1 ${
                               isSelected ? "bg-white" : "bg-emerald-500"
                             }`}
                           />
@@ -2005,7 +2158,7 @@ export default function App() {
                 }
                 setCalAddOpen(true);
               }}
-              className="px-2.5 py-1 rounded bg-emerald-600/15 text-emerald-600 text-[11px]"
+              className="px-2.5 py-1 rounded bg-emerald-600/15 text-emerald-600 text-xs"
             >
               {calAddOpen ? "Close" : "+ Add Reminder Here"}
             </button>
@@ -2017,6 +2170,7 @@ export default function App() {
             >
               <div className="flex gap-1.5">
                 <input
+                  aria-label="Website URL"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
                   placeholder="Paste URL or leave empty for current tab"
@@ -2028,11 +2182,12 @@ export default function App() {
                 />
                 <input
                   type="time"
+                  aria-label="Reminder time"
                   value={repeatCfg.time}
                   onChange={(e) =>
                     setRepeatCfg({ ...repeatCfg, time: e.target.value })
                   }
-                  className={`px-2 py-1 text-xs rounded border bg-white/80 text-slate-900 ${
+                  className={`px-2 py-1 text-xs rounded border bg-white/90 text-slate-900 ${
                     isCalPast
                       ? "border-red-500 ring-1 ring-red-500"
                       : "border-current/20"
@@ -2040,7 +2195,7 @@ export default function App() {
                 />
               </div>
               {isUrlInvalid && (
-                <div className="text-[11px] text-red-500 font-medium">
+                <div role="alert" className="text-xs text-red-500 font-medium">
                   ⚠️ Enter a valid URL or leave empty for current tab
                 </div>
               )}
@@ -2052,6 +2207,7 @@ export default function App() {
               />
               <div className="flex gap-1.5">
                 <input
+                  aria-label="Title or note"
                   value={noteInput}
                   onChange={(e) => setNoteInput(e.target.value)}
                   placeholder="Title or note..."
@@ -2103,7 +2259,9 @@ export default function App() {
 
       {toast.msg && (
         <div
-          className={`absolute bottom-3 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full text-white text-[11px] font-semibold shadow-lg whitespace-nowrap ${
+          role="status"
+          aria-live="polite"
+          className={`absolute bottom-3 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full text-white text-xs font-semibold shadow-lg whitespace-nowrap ${
             toast.error ? "bg-red-600" : "bg-slate-900"
           }`}
         >

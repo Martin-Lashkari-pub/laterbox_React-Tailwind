@@ -1,11 +1,11 @@
 const DAYS = [
-  { id: 1, label: "M" },
-  { id: 2, label: "T" },
-  { id: 3, label: "W" },
-  { id: 4, label: "T" },
-  { id: 5, label: "F" },
-  { id: 6, label: "S" },
-  { id: 0, label: "S" },
+  { id: 1, label: "M", name: "Monday" },
+  { id: 2, label: "T", name: "Tuesday" },
+  { id: 3, label: "W", name: "Wednesday" },
+  { id: 4, label: "T", name: "Thursday" },
+  { id: 5, label: "F", name: "Friday" },
+  { id: 6, label: "S", name: "Saturday" },
+  { id: 0, label: "S", name: "Sunday" },
 ];
 
 const WEEKDAY_NAMES = [
@@ -101,12 +101,22 @@ export default function RepeatPicker({
       Date.now();
 
   return (
-    <div className="p-2 rounded-lg border border-current/15 bg-black/5 space-y-2">
+    <div
+      className={`p-2.5 rounded-lg border space-y-2 transition-colors ${
+        isOnceInPast
+          ? "border-red-500/60 bg-red-500/10"
+          : "border-current/15 bg-black/5"
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider opacity-65">
+        <span className="text-xs font-bold uppercase tracking-wider opacity-80">
           Type
         </span>
-        <div className="grid grid-cols-3 bg-black/10 p-0.5 rounded-md w-48">
+        <div
+          role="group"
+          aria-label="Reminder frequency"
+          className="grid grid-cols-3 bg-black/10 p-0.5 rounded-md w-52"
+        >
           {[
             { id: "none", label: "Once" },
             { id: "weekly", label: "Weekly" },
@@ -115,11 +125,12 @@ export default function RepeatPicker({
             <button
               key={m.id}
               type="button"
+              aria-pressed={value.type === m.id}
               onClick={() => switchMode(m.id)}
-              className={`text-[11px] font-semibold py-1 rounded transition ${
+              className={`text-xs font-semibold py-1 rounded transition ${
                 value.type === m.id
                   ? "bg-emerald-600 text-white shadow-xs"
-                  : "opacity-70 hover:opacity-100"
+                  : "opacity-80 hover:opacity-100"
               }`}
             >
               {m.label}
@@ -129,61 +140,89 @@ export default function RepeatPicker({
       </div>
 
       {value.type === "none" && !inCalendar && (
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1 text-[10px] font-bold uppercase opacity-70">
-            Date
-            <input
-              type="date"
-              value={value.date}
-              onChange={(e) => onChange({ ...value, date: e.target.value })}
-              className="px-2 py-1 rounded border border-current/20 bg-white/80 text-slate-900 text-xs"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-[10px] font-bold uppercase opacity-70">
-            Time
-            <input
-              type="time"
-              value={value.time}
-              onChange={(e) => onChange({ ...value, time: e.target.value })}
-              className="px-2 py-1 rounded border border-current/20 bg-white/80 text-slate-900 text-xs"
-            />
-          </label>
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1 text-xs font-bold uppercase opacity-80">
+              Date
+              <input
+                type="date"
+                value={value.date}
+                onChange={(e) => onChange({ ...value, date: e.target.value })}
+                className={`px-2 py-1 rounded border bg-white/90 text-slate-900 text-xs ${
+                  isOnceInPast
+                    ? "border-red-500 ring-1 ring-red-500"
+                    : "border-current/20"
+                }`}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-bold uppercase opacity-80">
+              Time
+              <input
+                type="time"
+                value={value.time}
+                onChange={(e) => onChange({ ...value, time: e.target.value })}
+                className={`px-2 py-1 rounded border bg-white/90 text-slate-900 text-xs ${
+                  isOnceInPast
+                    ? "border-red-500 ring-1 ring-red-500"
+                    : "border-current/20"
+                }`}
+              />
+            </label>
+          </div>
+          {isOnceInPast && (
+            <div
+              role="alert"
+              className="text-xs text-red-600 font-semibold flex items-center gap-1"
+            >
+              <span>⚠️</span>
+              <span>Selected date &amp; time has already passed.</span>
+            </div>
+          )}
         </div>
       )}
 
       {value.type === "weekly" && (
         <div className="space-y-2">
-          <div className="grid grid-cols-7 gap-1">
-            {DAYS.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => toggleWeekDay(d.id)}
-                className={`h-7 rounded-full text-xs font-bold border transition ${
-                  (value.daysOfWeek || []).includes(d.id)
-                    ? "bg-emerald-600 text-white border-emerald-600"
-                    : "border-current/20 opacity-75 hover:opacity-100"
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
+          <div
+            role="group"
+            aria-label="Days of week"
+            className="grid grid-cols-7 gap-1"
+          >
+            {DAYS.map((d) => {
+              const active = (value.daysOfWeek || []).includes(d.id);
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  aria-label={d.name}
+                  aria-pressed={active}
+                  onClick={() => toggleWeekDay(d.id)}
+                  className={`h-8 rounded-full text-xs font-bold border transition ${
+                    active
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : "border-current/25 opacity-85 hover:opacity-100"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              );
+            })}
           </div>
           <div className="flex items-center justify-between gap-2">
-            <div className="flex gap-1">
+            <div className="flex gap-1.5">
               <button
                 type="button"
                 onClick={() =>
                   onChange({ ...value, daysOfWeek: [1, 2, 3, 4, 5] })
                 }
-                className="text-[10px] font-semibold px-2 py-1 rounded border border-current/20 hover:border-emerald-500"
+                className="text-xs font-semibold px-2.5 py-1 rounded border border-current/20 hover:border-emerald-500"
               >
                 Weekdays
               </button>
               <button
                 type="button"
                 onClick={() => onChange({ ...value, daysOfWeek: [6, 0] })}
-                className="text-[10px] font-semibold px-2 py-1 rounded border border-current/20 hover:border-emerald-500"
+                className="text-xs font-semibold px-2.5 py-1 rounded border border-current/20 hover:border-emerald-500"
               >
                 Weekends
               </button>
@@ -191,9 +230,10 @@ export default function RepeatPicker({
             {!inCalendar && (
               <input
                 type="time"
+                aria-label="Reminder time"
                 value={value.time}
                 onChange={(e) => onChange({ ...value, time: e.target.value })}
-                className="px-2 py-0.5 rounded border border-current/20 bg-white/80 text-slate-900 text-xs"
+                className="px-2 py-1 rounded border border-current/20 bg-white/90 text-slate-900 text-xs"
               />
             )}
           </div>
@@ -202,11 +242,11 @@ export default function RepeatPicker({
 
       {value.type === "monthly" && inCalendar && (
         <div className="space-y-1">
-          <div className="flex items-center justify-between gap-2 text-[11px]">
+          <div className="flex items-center justify-between gap-2 text-xs">
             <span className="font-semibold text-emerald-600">
               Every month on {monthlyParts.join(", ")}
             </span>
-            <label className="flex items-center gap-1.5 cursor-pointer opacity-80 hover:opacity-100 shrink-0">
+            <label className="flex items-center gap-1.5 cursor-pointer opacity-90 hover:opacity-100 shrink-0">
               <input
                 type="checkbox"
                 checked={value.lastDayOfMonth}
@@ -227,7 +267,7 @@ export default function RepeatPicker({
               <span>Last day</span>
             </label>
           </div>
-          <div className="text-[10px] opacity-60">
+          <div className="text-xs opacity-75">
             Tap dates in the calendar above to add or remove days.
           </div>
         </div>
@@ -235,25 +275,34 @@ export default function RepeatPicker({
 
       {value.type === "monthly" && !inCalendar && (
         <div className="space-y-2">
-          <div className="grid grid-cols-7 gap-1 p-1 rounded border border-current/15 bg-white/5">
-            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-              <button
-                key={day}
-                type="button"
-                onClick={() => toggleMonthDay(day)}
-                className={`h-6 rounded text-[11px] font-semibold ${
-                  (value.daysOfMonth || []).includes(day)
-                    ? "bg-emerald-600 text-white"
-                    : "opacity-75 hover:bg-emerald-500/15"
-                }`}
-              >
-                {day}
-              </button>
-            ))}
+          <div
+            role="group"
+            aria-label="Days of month"
+            className="grid grid-cols-7 gap-1 p-1 rounded border border-current/15 bg-white/5"
+          >
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+              const active = (value.daysOfMonth || []).includes(day);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleMonthDay(day)}
+                  className={`h-7 rounded text-xs font-semibold ${
+                    active
+                      ? "bg-emerald-600 text-white"
+                      : "opacity-85 hover:bg-emerald-500/15"
+                  }`}
+                >
+                  {day}
+                </button>
+              );
+            })}
           </div>
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
+              aria-pressed={value.lastDayOfMonth}
               onClick={() => {
                 if (
                   value.lastDayOfMonth &&
@@ -262,19 +311,20 @@ export default function RepeatPicker({
                   return;
                 onChange({ ...value, lastDayOfMonth: !value.lastDayOfMonth });
               }}
-              className={`text-[10px] font-semibold px-2 py-1 rounded border ${
+              className={`text-xs font-semibold px-2.5 py-1 rounded border ${
                 value.lastDayOfMonth
                   ? "bg-emerald-600/20 border-emerald-500 text-emerald-600"
-                  : "border-current/20 opacity-75"
+                  : "border-current/20 opacity-85"
               }`}
             >
               Last day of month
             </button>
             <input
               type="time"
+              aria-label="Reminder time"
               value={value.time}
               onChange={(e) => onChange({ ...value, time: e.target.value })}
-              className="px-2 py-0.5 rounded border border-current/20 bg-white/80 text-slate-900 text-xs"
+              className="px-2 py-1 rounded border border-current/20 bg-white/90 text-slate-900 text-xs"
             />
           </div>
         </div>
@@ -282,11 +332,17 @@ export default function RepeatPicker({
 
       {value.type === "none" && inCalendar && (
         <div
-          className={`text-[11px] ${isOnceInPast ? "text-red-500 font-semibold" : "opacity-70"}`}
+          role={isOnceInPast ? "alert" : undefined}
+          className={`text-xs flex items-center gap-1.5 ${
+            isOnceInPast ? "text-red-600 font-semibold" : "opacity-80"
+          }`}
         >
-          {isOnceInPast
-            ? `This date has already passed. Pick a future date or switch to Monthly/Weekly.`
-            : `One-time alert on ${calWeekdayName}, ${ordinal(calDayOfMonth)}`}
+          <span>{isOnceInPast ? "⚠️" : "📅"}</span>
+          <span>
+            {isOnceInPast
+              ? "This date has passed. Pick a future date or switch to Monthly/Weekly."
+              : `One-time alert on ${calWeekdayName}, ${ordinal(calDayOfMonth)}`}
+          </span>
         </div>
       )}
     </div>
