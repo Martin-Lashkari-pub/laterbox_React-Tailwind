@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "LaterBox",
+  "version": "3.0",
+  "description": "Save, organize, and schedule tabs and links with folder management and recurring reminders.",
+  "permissions": ["tabs", "storage", "alarms", "notifications"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "LaterBox-Ikon.png",
+    "48": "LaterBox-Ikon.png",
+    "128": "LaterBox-Ikon.png"
+  },
+  "action": {
+    "default_popup": "index.html",
+    "default_icon": "LaterBox-Ikon.png"
+  }
+}
