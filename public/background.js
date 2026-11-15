@@ -83,7 +83,7 @@ async function updateBadge() {
   if (due > 0) chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
 }
 
-async function syncAlarmsAndBadge() {
+async function syncAlarmsAndBadge(startupDelayMs = 6000) {
   const { laterBoxItems = [] } =
     await chrome.storage.local.get("laterBoxItems");
   const now = Date.now();
@@ -94,7 +94,8 @@ async function syncAlarmsAndBadge() {
     if (item.type !== "link" || !item.reminderTime || item.dismissed) continue;
     const alarmName = `tabvault_${item.id}`;
     validIds.add(alarmName);
-    const triggerAt = Math.max(item.reminderTime, now + 1500);
+    const triggerAt =
+      item.reminderTime <= now ? now + startupDelayMs : item.reminderTime;
     await chrome.alarms.create(alarmName, { when: triggerAt });
   }
 
@@ -276,8 +277,8 @@ chrome.notifications.onClicked.addListener(async (id) => {
   chrome.notifications.clear(id);
 });
 
-chrome.runtime.onInstalled.addListener(syncAlarmsAndBadge);
-chrome.runtime.onStartup.addListener(syncAlarmsAndBadge);
+chrome.runtime.onInstalled.addListener(() => syncAlarmsAndBadge(6000));
+chrome.runtime.onStartup.addListener(() => syncAlarmsAndBadge(6000));
 chrome.storage.onChanged.addListener((c, area) => {
   if (area === "local" && c.laterBoxItems) updateBadge();
 });
