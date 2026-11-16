@@ -97,6 +97,12 @@ export default function App() {
 
   const [urlInput, setUrlInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
+  const [saveTargetFolder, setSaveTargetFolder] = useState("");
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [pickerBrowseFolderId, setPickerBrowseFolderId] = useState(null);
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerCreatingFolder, setPickerCreatingFolder] = useState(false);
+  const [pickerNewFolderName, setPickerNewFolderName] = useState("");
   const [useReminder, setUseReminder] = useState(false);
   const [repeatCfg, setRepeatCfg] = useState(createDefaultRepeat);
 
@@ -159,6 +165,26 @@ export default function App() {
     setModalShake(false);
   };
 
+  const openFoldersRoot = () => {
+    setFolderId(null);
+    setFolderSearch("");
+    setCreatingFolder(false);
+    setRenamingFolderId(null);
+    setView("folders");
+  };
+
+  const closeFolderPicker = () => {
+    setFolderPickerOpen(false);
+    setPickerSearch("");
+    setPickerCreatingFolder(false);
+    setPickerBrowseFolderId(null);
+  };
+
+  const selectFolderInPicker = (targetId) => {
+    setSaveTargetFolder(targetId);
+    closeFolderPicker();
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const alarmParamId = params.get("alarm");
@@ -197,7 +223,7 @@ export default function App() {
           } else if (laterBoxDraft) {
             if (
               laterBoxDraft.view &&
-              ["home", "links", "folders", "calendar"].includes(
+              ["home", "links", "folders", "calendar", "reminders"].includes(
                 laterBoxDraft.view,
               )
             ) {
@@ -213,6 +239,8 @@ export default function App() {
             }
             if (laterBoxDraft.urlInput) setUrlInput(laterBoxDraft.urlInput);
             if (laterBoxDraft.noteInput) setNoteInput(laterBoxDraft.noteInput);
+            if (laterBoxDraft.saveTargetFolder)
+              setSaveTargetFolder(laterBoxDraft.saveTargetFolder);
             if (laterBoxDraft.useReminder)
               setUseReminder(laterBoxDraft.useReminder);
             if (laterBoxDraft.repeatCfg) setRepeatCfg(laterBoxDraft.repeatCfg);
@@ -264,6 +292,7 @@ export default function App() {
       folderId,
       urlInput,
       noteInput,
+      saveTargetFolder,
       useReminder,
       repeatCfg,
       selectedDate,
@@ -276,6 +305,7 @@ export default function App() {
     folderId,
     urlInput,
     noteInput,
+    saveTargetFolder,
     useReminder,
     repeatCfg,
     selectedDate,
@@ -408,6 +438,7 @@ export default function App() {
     setEditingItemId(null);
     setUrlInput("");
     setNoteInput("");
+    setSaveTargetFolder("");
     setUseReminder(false);
     setWipeStage(null);
     setWipeProgress(0);
@@ -440,6 +471,7 @@ export default function App() {
   const resetFormAndDraft = async () => {
     setUrlInput("");
     setNoteInput("");
+    setSaveTargetFolder("");
     setUseReminder(false);
     setRepeatCfg(createDefaultRepeat());
     if (!isPrivateMode) await storage.clearDraft();
@@ -480,6 +512,7 @@ export default function App() {
       setPrivateMeta(lockMeta);
       setPrivateKey(aesKey);
       setFolderId(null);
+      setSaveTargetFolder("");
       setSearch("");
       setFolderSearch("");
       closePrivateModal();
@@ -519,6 +552,7 @@ export default function App() {
       setDecryptedMap(nextDecrypted);
       setPrivateKey(aesKey);
       setFolderId(null);
+      setSaveTargetFolder("");
       setSearch("");
       setFolderSearch("");
       closePrivateModal();
@@ -532,6 +566,7 @@ export default function App() {
     setPrivateKey(null);
     setDecryptedMap({});
     setFolderId(null);
+    setSaveTargetFolder("");
     setSearch("");
     setFolderSearch("");
     setEditingItemId(null);
@@ -570,6 +605,7 @@ export default function App() {
       setPrivateKey(null);
       setDecryptedMap({});
       setFolderId(null);
+      setSaveTargetFolder("");
       closePrivateModal();
       notify("Private Space reset & data deleted");
     } finally {
@@ -688,6 +724,7 @@ export default function App() {
       return false;
     }
 
+    const resolvedFolderId = targetFolder || null;
     const cleanUrl = normalizeUrl(rawUrl.trim());
     let reminderTime = null;
     let reminderDate = null;
@@ -737,7 +774,7 @@ export default function App() {
         url: "",
         note: "",
         favorite: false,
-        parentId: targetFolder,
+        parentId: resolvedFolderId,
         createdAt: Date.now(),
         reminderDate,
         reminderTime,
@@ -753,7 +790,7 @@ export default function App() {
         isPrivate: false,
         encrypted: false,
         url: cleanUrl,
-        parentId: targetFolder,
+        parentId: resolvedFolderId,
         createdAt: Date.now(),
         reminderDate,
         reminderTime,
@@ -772,7 +809,13 @@ export default function App() {
       scheduleChromeAlarm(newItem);
       notify(`Next alert: ${formatReminderTime(reminderTime)}`);
     } else {
-      notify(isPrivateMode ? "Saved to Private Space" : "Link saved");
+      notify(
+        resolvedFolderId
+          ? `Saved to "${getFolderName(resolvedFolderId)}"`
+          : isPrivateMode
+            ? "Saved to Private Space"
+            : "Link saved",
+      );
     }
 
     if (
@@ -792,26 +835,62 @@ export default function App() {
     return true;
   };
 
-  const saveCurrentTab = (
-    withSchedule = false,
-    targetFolder = null,
-    customDate = null,
-    onSuccess = null,
-  ) => {
+  const fillCurrentTabAddress = () => {
     if (typeof chrome !== "undefined" && chrome.tabs) {
-      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-        if (tabs[0]?.url) {
-          const ok = await saveLink({
-            rawUrl: tabs[0].url,
-            fallbackTitle: tabs[0].title || "",
-            withSchedule,
-            targetFolder,
-            customDate,
-          });
-          if (ok && onSuccess) onSuccess();
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const tab = tabs?.[0];
+        if (tab?.url) {
+          setUrlInput(tab.url);
+          if (!noteInput.trim() && tab.title) {
+            setNoteInput(tab.title.replace(/ - YouTube$/, "").trim());
+          }
+          notify("Current tab address pasted");
         }
       });
     }
+  };
+
+  const handleCreateFolderFromPicker = async () => {
+    const trimmed = pickerNewFolderName.trim();
+    if (!trimmed) {
+      setPickerCreatingFolder(false);
+      return;
+    }
+    const id = genId();
+    const parentForNew = pickerBrowseFolderId || null;
+    if (isPrivateMode) {
+      const cipher = await vaultCrypto.encryptPayload(privateKey, {
+        name: trimmed,
+      });
+      setDecryptedMap((prev) => ({ ...prev, [id]: { name: trimmed } }));
+      await persistItems([
+        ...items,
+        {
+          id,
+          type: "folder",
+          isPrivate: true,
+          encrypted: true,
+          cipher,
+          name: "",
+          parentId: parentForNew,
+        },
+      ]);
+    } else {
+      await persistItems([
+        ...items,
+        {
+          id,
+          type: "folder",
+          isPrivate: false,
+          name: trimmed,
+          parentId: parentForNew,
+        },
+      ]);
+    }
+    setPickerNewFolderName("");
+    setPickerCreatingFolder(false);
+    selectFolderInPicker(id);
+    notify(`Folder "${trimmed}" selected`);
   };
 
   const openEditor = (rawItem) => {
@@ -1082,6 +1161,7 @@ export default function App() {
     const remaining = items.filter((i) => !toDelete.has(i.id));
     await persistItems(remaining, remaining.length === 0);
     if (toDelete.has(folderId)) setFolderId(null);
+    if (toDelete.has(saveTargetFolder)) setSaveTargetFolder("");
     if (detailItemId === id) setView("home");
     if (editingItemId === id) setView("home");
   };
@@ -1108,6 +1188,11 @@ export default function App() {
     [spaceItems],
   );
 
+  const regularLinks = useMemo(
+    () => spaceLinks.filter((i) => !i.reminderTime || i.dismissed),
+    [spaceLinks],
+  );
+
   const getFolderName = (parentId) => {
     if (!parentId) return "";
     const f = spaceFolders.find((i) => i.id === parentId);
@@ -1132,18 +1217,15 @@ export default function App() {
   const detailItem = spaceLinks.find((i) => i.id === detailItemId);
 
   const favoriteCount = useMemo(
-    () => spaceLinks.filter((i) => i.favorite).length,
-    [spaceLinks],
+    () => regularLinks.filter((i) => i.favorite).length,
+    [regularLinks],
   );
 
   const searchedLinks = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return spaceLinks
+    return regularLinks
       .filter((i) => {
         if (linkFilter === "favorites") return Boolean(i.favorite);
-        if (linkFilter === "scheduled")
-          return Boolean(i.reminderTime && !i.dismissed);
-        if (linkFilter === "unscheduled") return !i.reminderTime || i.dismissed;
         return true;
       })
       .filter((i) => {
@@ -1154,7 +1236,7 @@ export default function App() {
         );
       })
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  }, [spaceLinks, search, linkFilter]);
+  }, [regularLinks, search, linkFilter]);
 
   const matchingFolders = useMemo(() => {
     const q = folderSearch.trim().toLowerCase();
@@ -1191,7 +1273,11 @@ export default function App() {
       Date.now();
 
   const hasUnsavedDraft = Boolean(
-    urlInput.trim() || noteInput.trim() || useReminder || calAddOpen,
+    urlInput.trim() ||
+    noteInput.trim() ||
+    saveTargetFolder ||
+    useReminder ||
+    calAddOpen,
   );
   const currentFontScale = resolveFontScale(prefs.font);
 
@@ -1320,8 +1406,36 @@ export default function App() {
   }
 
   const folderChildren = spaceItems
-    .filter((i) => i.parentId === folderId)
+    .filter((i) => {
+      if (i.parentId !== folderId) return false;
+      if (!folderId && i.type !== "folder") return false;
+      return true;
+    })
     .sort((a, b) => (a.type === b.type ? 0 : a.type === "folder" ? -1 : 1));
+
+  // Level-by-level drill-down data for the Location Picker
+  const pickerBrowsedFolder = pickerBrowseFolderId
+    ? spaceFolders.find((f) => f.id === pickerBrowseFolderId)
+    : null;
+  const pickerBreadcrumbs = [];
+  let tempPickerId = pickerBrowseFolderId;
+  while (tempPickerId) {
+    const f = spaceFolders.find((i) => i.id === tempPickerId);
+    if (f) {
+      pickerBreadcrumbs.unshift(f);
+      tempPickerId = f.parentId;
+    } else break;
+  }
+  const pickerSubfolders = spaceFolders.filter(
+    (f) => (f.parentId || null) === (pickerBrowseFolderId || null),
+  );
+  const pickerFilteredFolders = pickerSearch.trim()
+    ? spaceFolders.filter((f) =>
+        (f.name || "")
+          .toLowerCase()
+          .includes(pickerSearch.trim().toLowerCase()),
+      )
+    : [];
 
   const firstDay = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
   const startOffset = (firstDay.getDay() + 6) % 7;
@@ -1337,7 +1451,315 @@ export default function App() {
     <div
       className={`w-full h-full flex flex-col relative ${THEMES[prefs.theme]}`}
     >
-      {/* WIPE ALL DATA MODAL (Step 1: Warning + Password if Private Mode exists -> Step 2: 0–100% Cancelable Progress Bar) */}
+      {/* DRILL-DOWN ROOT FOLDER LOCATION PICKER */}
+      {folderPickerOpen && (
+        <div
+          onClick={closeFolderPicker}
+          className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-3"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose destination folder"
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm max-h-[84%] flex flex-col rounded-2xl border shadow-2xl overflow-hidden ${CARD_BG[prefs.theme]}`}
+          >
+            {/* Header with Back button */}
+            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-current/10 shrink-0">
+              {pickerBrowsedFolder && !pickerSearch.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickerBrowseFolderId(
+                      pickerBrowsedFolder.parentId || null,
+                    );
+                    setPickerCreatingFolder(false);
+                  }}
+                  className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-0.5"
+                >
+                  <span>‹ Back</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={closeFolderPicker}
+                  className="text-xs font-semibold opacity-75 hover:opacity-100"
+                >
+                  Cancel
+                </button>
+              )}
+
+              <span className="text-xs font-bold truncate max-w-[50%]">
+                {pickerBrowsedFolder && !pickerSearch.trim()
+                  ? pickerBrowsedFolder.name
+                  : "Root"}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPickerCreatingFolder((v) => !v);
+                  setPickerNewFolderName("");
+                }}
+                className="text-xs font-bold text-emerald-600 hover:underline"
+              >
+                + Folder
+              </button>
+            </div>
+
+            {/* Clickable Breadcrumb Trail */}
+            {!pickerSearch.trim() && pickerBreadcrumbs.length > 0 && (
+              <nav
+                aria-label="Picker path"
+                className="flex items-center gap-1 px-3.5 py-1.5 border-b border-current/10 text-[11px] font-semibold overflow-x-auto bg-black/5 shrink-0"
+              >
+                <button
+                  type="button"
+                  onClick={() => setPickerBrowseFolderId(null)}
+                  className="hover:text-emerald-600 shrink-0"
+                >
+                  Root
+                </button>
+                {pickerBreadcrumbs.map((f, idx) => (
+                  <span key={f.id} className="flex items-center gap-1 shrink-0">
+                    <span className="opacity-50">/</span>
+                    <button
+                      type="button"
+                      onClick={() => setPickerBrowseFolderId(f.id)}
+                      className={
+                        idx === pickerBreadcrumbs.length - 1
+                          ? "text-emerald-600 font-bold"
+                          : "hover:text-emerald-600"
+                      }
+                    >
+                      {f.name}
+                    </button>
+                  </span>
+                ))}
+              </nav>
+            )}
+
+            {/* Inline Quick Create Folder */}
+            {pickerCreatingFolder && (
+              <div className="flex items-center gap-1.5 px-3 py-2 border-b border-current/10 bg-emerald-500/5 shrink-0">
+                <span className="text-xs">📁</span>
+                <input
+                  type="text"
+                  autoFocus
+                  value={pickerNewFolderName}
+                  onChange={(e) => setPickerNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateFolderFromPicker();
+                    if (e.key === "Escape") setPickerCreatingFolder(false);
+                  }}
+                  placeholder={
+                    pickerBrowsedFolder
+                      ? `New subfolder in ${pickerBrowsedFolder.name}...`
+                      : "New folder name..."
+                  }
+                  className="flex-1 px-2 py-1 text-xs rounded border border-emerald-500 bg-transparent outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={!pickerNewFolderName.trim()}
+                  onClick={handleCreateFolderFromPicker}
+                  className="px-2.5 py-1 rounded bg-emerald-600 text-white text-xs font-bold disabled:opacity-40"
+                >
+                  Add
+                </button>
+              </div>
+            )}
+
+            {/* Instant Search Bar */}
+            <div className="p-2.5 border-b border-current/10 shrink-0">
+              <div className="relative flex items-center">
+                <span className="absolute left-2.5 text-xs opacity-60">🔍</span>
+                <input
+                  type="text"
+                  autoFocus={!pickerCreatingFolder}
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  placeholder="Search all folders..."
+                  className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-current/20 bg-transparent outline-none focus:border-emerald-500"
+                />
+                {pickerSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setPickerSearch("")}
+                    className="absolute right-2 text-xs opacity-70 hover:opacity-100"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Primary "Save in [Current Folder]" Action when inside a subfolder */}
+            {pickerBrowsedFolder && !pickerSearch.trim() && (
+              <div className="px-2.5 pt-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => selectFolderInPicker(pickerBrowsedFolder.id)}
+                  className="w-full py-2 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 flex items-center justify-between shadow-xs"
+                >
+                  <span className="truncate">
+                    Save in "{pickerBrowsedFolder.name}"
+                  </span>
+                  <span>Select ✓</span>
+                </button>
+              </div>
+            )}
+
+            {/* Single-Level Folder List */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+              {pickerSearch.trim() ? (
+                <div>
+                  <div className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wider opacity-65">
+                    Search Results ({pickerFilteredFolders.length})
+                  </div>
+                  {pickerFilteredFolders.length === 0 ? (
+                    <div className="text-center text-xs opacity-70 py-6">
+                      No folders matching "{pickerSearch.trim()}"
+                    </div>
+                  ) : (
+                    pickerFilteredFolders.map((f) => {
+                      const path = getFolderPath(f.parentId);
+                      const isSelected = saveTargetFolder === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => selectFolderInPicker(f.id)}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs text-left transition ${
+                            isSelected
+                              ? "bg-emerald-600/15 text-emerald-600 font-bold"
+                              : "hover:bg-current/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span>📁</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate">{f.name}</div>
+                              {path && (
+                                <div className="text-[11px] opacity-65 truncate">
+                                  Root / {path}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {isSelected && <span>✓</span>}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* Root-level default option */}
+                  {!pickerBrowsedFolder && (
+                    <button
+                      type="button"
+                      onClick={() => selectFolderInPicker("")}
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs text-left transition ${
+                        saveTargetFolder === ""
+                          ? "bg-emerald-600/15 text-emerald-600 font-bold"
+                          : "hover:bg-current/5"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>🔗</span>
+                        <span>Links (No folder)</span>
+                      </span>
+                      {saveTargetFolder === "" && <span>✓</span>}
+                    </button>
+                  )}
+
+                  <div className="px-2 pt-1 pb-0.5 text-[11px] font-bold uppercase tracking-wider opacity-65">
+                    {pickerBrowsedFolder
+                      ? `Subfolders (${pickerSubfolders.length})`
+                      : `Folders (${pickerSubfolders.length})`}
+                  </div>
+
+                  {pickerSubfolders.length === 0 ? (
+                    <div className="px-2.5 py-4 text-center text-xs opacity-65">
+                      {pickerBrowsedFolder
+                        ? "No subfolders here. Tap the green button above to save here."
+                        : "No folders yet. Tap + Folder above to create one."}
+                    </div>
+                  ) : (
+                    pickerSubfolders.map((folder) => {
+                      const subFolders = spaceFolders.filter(
+                        (x) => x.parentId === folder.id,
+                      );
+                      const hasSubfolders = subFolders.length > 0;
+                      const isSelected = saveTargetFolder === folder.id;
+
+                      return (
+                        <div
+                          key={folder.id}
+                          onClick={() => {
+                            if (hasSubfolders) {
+                              setPickerBrowseFolderId(folder.id);
+                              setPickerCreatingFolder(false);
+                            } else {
+                              selectFolderInPicker(folder.id);
+                            }
+                          }}
+                          className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-xs cursor-pointer select-none transition ${
+                            isSelected
+                              ? "bg-emerald-600/15 text-emerald-600 font-bold"
+                              : "hover:bg-current/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span>📁</span>
+                            <span className="truncate font-semibold">
+                              {folder.name}
+                            </span>
+                            {hasSubfolders && (
+                              <span className="text-[11px] opacity-60 shrink-0">
+                                ({subFolders.length})
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {hasSubfolders ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    selectFolderInPicker(folder.id);
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                                    isSelected
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-emerald-600/15 text-emerald-600 hover:bg-emerald-600 hover:text-white"
+                                  }`}
+                                >
+                                  {isSelected ? "Selected ✓" : "Select"}
+                                </button>
+                                <span className="opacity-65 text-sm leading-none pl-0.5">
+                                  ›
+                                </span>
+                              </>
+                            ) : (
+                              isSelected && <span className="font-bold">✓</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WIPE ALL DATA MODAL */}
       {wipeStage && (
         <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div
@@ -1707,7 +2129,7 @@ export default function App() {
                   className="px-2.5 py-1.5 text-xs font-normal rounded-lg border border-current/20 bg-transparent outline-none focus:border-emerald-500"
                 >
                   <option value="" className="text-slate-900">
-                    Root (No folder)
+                    Links (No folder)
                   </option>
                   {spaceFolders.map((f) => (
                     <option key={f.id} value={f.id} className="text-slate-900">
@@ -1766,6 +2188,33 @@ export default function App() {
               </button>
             </div>
           </div>
+        </>
+      ) : view === "reminders" ? (
+        /* DEDICATED ALL UPCOMING REMINDERS VIEW */
+        <>
+          <div
+            className={`flex items-center justify-between px-3.5 py-2.5 border-b shrink-0 ${CARD_BG[prefs.theme]}`}
+          >
+            <button
+              onClick={() => setView("home")}
+              className="text-xs font-bold text-emerald-600 bg-emerald-500/15 px-3 py-1.5 rounded-md"
+            >
+              ← Back to Home
+            </button>
+            <span className="text-xs font-bold uppercase tracking-wider opacity-75">
+              All Reminders ({upcomingReminders.length})
+            </span>
+          </div>
+
+          <ul className="flex-1 overflow-y-auto p-3">
+            {upcomingReminders.length === 0 ? (
+              <li className="text-center text-xs opacity-75 py-10">
+                No upcoming reminders scheduled.
+              </li>
+            ) : (
+              upcomingReminders.map((i) => renderLinkRow(i, false, true))
+            )}
+          </ul>
         </>
       ) : view === "settings" ? (
         /* SETTINGS VIEW */
@@ -2333,38 +2782,47 @@ export default function App() {
                     )}
                   </div>
                   <button
-                    onClick={() => saveCurrentTab(false, null)}
+                    type="button"
+                    onClick={fillCurrentTabAddress}
                     className="text-xs font-bold px-2.5 py-1 rounded bg-emerald-600/15 text-emerald-600 hover:bg-emerald-600/25"
                   >
-                    + Save Current Tab
+                    Get Current Tab
                   </button>
                 </div>
+
                 <div className="flex gap-1.5">
                   <input
                     aria-label="Website URL"
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
-                    placeholder="Paste a URL (e.g. youtube.com)..."
+                    placeholder="Paste a URL or tap Get Current Tab..."
                     className={`flex-1 px-2.5 py-1.5 text-xs rounded-lg border bg-transparent outline-none ${
                       isUrlInvalid
                         ? "border-red-500 ring-1 ring-red-500"
                         : "border-current/20 focus:border-emerald-500"
                     }`}
                   />
-                  <button
-                    onClick={() =>
-                      saveLink({ rawUrl: urlInput, withSchedule: false })
-                    }
-                    disabled={!urlInput.trim() || isUrlInvalid}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                      !urlInput.trim() || isUrlInvalid
-                        ? "bg-slate-400 text-white cursor-not-allowed"
-                        : "bg-emerald-600 text-white"
-                    }`}
-                  >
-                    Save
-                  </button>
+                  {!useReminder && (
+                    <button
+                      onClick={() =>
+                        saveLink({
+                          rawUrl: urlInput,
+                          withSchedule: false,
+                          targetFolder: saveTargetFolder || null,
+                        })
+                      }
+                      disabled={!urlInput.trim() || isUrlInvalid}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                        !urlInput.trim() || isUrlInvalid
+                          ? "bg-slate-400 text-white cursor-not-allowed"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      }`}
+                    >
+                      Save
+                    </button>
+                  )}
                 </div>
+
                 {isUrlInvalid && (
                   <div
                     role="alert"
@@ -2374,6 +2832,7 @@ export default function App() {
                     or .se)
                   </div>
                 )}
+
                 <input
                   aria-label="Title or note"
                   value={noteInput}
@@ -2381,6 +2840,29 @@ export default function App() {
                   placeholder="Optional title or note (auto-detected if empty)..."
                   className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-current/20 bg-transparent outline-none focus:border-emerald-500"
                 />
+
+                {/* Location Row Trigger */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickerSearch("");
+                    setPickerCreatingFolder(false);
+                    setPickerBrowseFolderId(null);
+                    setFolderPickerOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg border border-current/20 hover:border-emerald-500 transition text-left"
+                >
+                  <span className="font-semibold opacity-80">Location</span>
+                  <span className="flex items-center gap-1.5 font-semibold text-emerald-600 truncate max-w-[65%]">
+                    <span className="truncate">
+                      {saveTargetFolder
+                        ? `📁 ${getFolderPath(saveTargetFolder)}`
+                        : "Links (No folder)"}
+                    </span>
+                    <span className="opacity-70 shrink-0">›</span>
+                  </span>
+                </button>
+
                 <label className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -2402,34 +2884,23 @@ export default function App() {
                 {useReminder && (
                   <div className={shakeForm ? "animate-shake" : ""}>
                     <RepeatPicker value={repeatCfg} onChange={setRepeatCfg} />
-                    <div className="grid grid-cols-2 gap-1.5 mt-2">
-                      <button
-                        onClick={() => saveCurrentTab(true, null)}
-                        disabled={isHomePast}
-                        className={`py-1.5 rounded-lg text-xs font-bold transition ${
-                          isHomePast
-                            ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                            : "bg-emerald-600/15 text-emerald-600 hover:bg-emerald-600/25"
-                        }`}
-                      >
-                        Save Tab + Schedule
-                      </button>
-                      <button
-                        onClick={() =>
-                          saveLink({ rawUrl: urlInput, withSchedule: true })
-                        }
-                        disabled={
-                          isHomePast || !urlInput.trim() || isUrlInvalid
-                        }
-                        className={`py-1.5 rounded-lg text-xs font-bold transition ${
-                          isHomePast || !urlInput.trim() || isUrlInvalid
-                            ? "bg-slate-400 text-white cursor-not-allowed"
-                            : "bg-emerald-600 text-white"
-                        }`}
-                      >
-                        Save URL + Schedule
-                      </button>
-                    </div>
+                    <button
+                      onClick={() =>
+                        saveLink({
+                          rawUrl: urlInput,
+                          withSchedule: true,
+                          targetFolder: saveTargetFolder || null,
+                        })
+                      }
+                      disabled={isHomePast || !urlInput.trim() || isUrlInvalid}
+                      className={`w-full mt-2 py-1.5 rounded-lg text-xs font-bold transition ${
+                        isHomePast || !urlInput.trim() || isUrlInvalid
+                          ? "bg-slate-400 text-white cursor-not-allowed"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      }`}
+                    >
+                      Save Link + Schedule Reminder
+                    </button>
                   </div>
                 )}
               </section>
@@ -2448,7 +2919,7 @@ export default function App() {
                     },
                     {
                       label: "All Links",
-                      count: spaceLinks.length,
+                      count: regularLinks.length,
                       accent: "text-emerald-600",
                       go: () => {
                         setLinkFilter("all");
@@ -2459,7 +2930,7 @@ export default function App() {
                       label: "Folders",
                       count: spaceFolders.length,
                       accent: "text-emerald-600",
-                      go: () => setView("folders"),
+                      go: openFoldersRoot,
                     },
                   ].map((s) => (
                     <button
@@ -2480,13 +2951,13 @@ export default function App() {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold uppercase tracking-wider opacity-75">
-                      Upcoming Reminders
+                      Upcoming Reminders ({upcomingReminders.length})
                     </span>
                     <button
-                      onClick={() => setView("calendar")}
-                      className="text-xs font-semibold text-emerald-600 hover:underline"
+                      onClick={() => setView("reminders")}
+                      className="text-xs font-bold text-emerald-600 hover:underline"
                     >
-                      Calendar ({upcomingReminders.length}) →
+                      Show all →
                     </button>
                   </div>
                   {upcomingReminders.length === 0 ? (
@@ -2498,8 +2969,8 @@ export default function App() {
                   ) : (
                     <ul>
                       {upcomingReminders
-                        .slice(0, 5)
-                        .map((i) => renderLinkRow(i))}
+                        .slice(0, 3)
+                        .map((i) => renderLinkRow(i, false, true))}
                     </ul>
                   )}
                 </div>
@@ -2523,7 +2994,7 @@ export default function App() {
                     autoFocus
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search by title or URL..."
+                    placeholder="Search saved links by title or URL..."
                     className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-current/20 bg-transparent outline-none focus:border-emerald-500"
                   />
                   {search && (
@@ -2545,10 +3016,8 @@ export default function App() {
                     className="flex flex-wrap gap-1 bg-black/10 p-0.5 rounded-lg"
                   >
                     {[
-                      { id: "all", label: "All" },
+                      { id: "all", label: "All Links" },
                       { id: "favorites", label: "★ Favorites" },
-                      { id: "scheduled", label: "Scheduled" },
-                      { id: "unscheduled", label: "Unscheduled" },
                     ].map((f) => (
                       <button
                         key={f.id}
@@ -2577,7 +3046,7 @@ export default function App() {
                       ? `No links matching "${search.trim()}"`
                       : linkFilter === "favorites"
                         ? "No favorite links yet. Tap ☆ on any link to favorite it."
-                        : "No links in this filter."}
+                        : "No saved links yet."}
                   </li>
                 ) : (
                   searchedLinks.map((i) => renderLinkRow(i, false, true))
@@ -2616,7 +3085,7 @@ export default function App() {
                   )}
                 </div>
 
-                {!folderSearch.trim() && (
+                {!folderSearch.trim() && folderId && (
                   <>
                     <div className="flex gap-1.5">
                       <input
@@ -2631,6 +3100,13 @@ export default function App() {
                         }`}
                       />
                       <button
+                        type="button"
+                        onClick={fillCurrentTabAddress}
+                        className="px-2 py-1 rounded-lg bg-emerald-600/15 text-emerald-600 text-xs font-bold shrink-0 whitespace-nowrap"
+                      >
+                        Get Tab
+                      </button>
+                      <button
                         onClick={() =>
                           saveLink({ rawUrl: urlInput, targetFolder: folderId })
                         }
@@ -2642,12 +3118,6 @@ export default function App() {
                         }`}
                       >
                         Save
-                      </button>
-                      <button
-                        onClick={() => saveCurrentTab(false, folderId)}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-600/15 text-emerald-600 text-xs font-bold shrink-0 whitespace-nowrap"
-                      >
-                        + Current Tab
                       </button>
                     </div>
                     {isUrlInvalid && (
@@ -2735,7 +3205,7 @@ export default function App() {
                         onClick={() => setFolderId(null)}
                         className="hover:text-emerald-600"
                       >
-                        Root
+                        Folders
                       </button>
                       {breadcrumbs.map((f) => (
                         <span key={f.id} className="flex items-center gap-1">
@@ -2813,7 +3283,9 @@ export default function App() {
                   <ul className="flex-1 overflow-y-auto p-3">
                     {folderChildren.length === 0 && !creatingFolder && (
                       <li className="text-center text-xs opacity-75 py-8">
-                        Folder is empty.
+                        {folderId
+                          ? "This folder is empty."
+                          : "No folders yet. Tap + Folder to create one."}
                       </li>
                     )}
                     {folderChildren.map((item) =>
@@ -3085,13 +3557,20 @@ export default function App() {
                       aria-label="Website URL"
                       value={urlInput}
                       onChange={(e) => setUrlInput(e.target.value)}
-                      placeholder="Paste URL or leave empty for current tab"
+                      placeholder="Paste URL or tap Get Tab..."
                       className={`flex-1 px-2 py-1 text-xs rounded border bg-transparent ${
                         isUrlInvalid
                           ? "border-red-500 ring-1 ring-red-500"
                           : "border-current/20"
                       }`}
                     />
+                    <button
+                      type="button"
+                      onClick={fillCurrentTabAddress}
+                      className="px-2 py-1 rounded bg-emerald-600/15 text-emerald-600 text-xs font-bold shrink-0"
+                    >
+                      Get Tab
+                    </button>
                     <input
                       type="time"
                       aria-label="Reminder time"
@@ -3111,7 +3590,7 @@ export default function App() {
                       role="alert"
                       className="text-xs text-red-500 font-medium"
                     >
-                      ⚠️ Enter a valid URL or leave empty for current tab
+                      ⚠️ Enter a valid URL
                     </div>
                   )}
                   <RepeatPicker
@@ -3129,23 +3608,17 @@ export default function App() {
                       className="flex-1 px-2 py-1 text-xs rounded border border-current/20 bg-transparent"
                     />
                     <button
-                      disabled={isCalPast || isUrlInvalid}
+                      disabled={isCalPast || isUrlInvalid || !urlInput.trim()}
                       onClick={async () => {
-                        if (urlInput.trim()) {
-                          const ok = await saveLink({
-                            rawUrl: urlInput,
-                            withSchedule: true,
-                            customDate: selectedDate,
-                          });
-                          if (ok) setCalAddOpen(false);
-                        } else {
-                          saveCurrentTab(true, null, selectedDate, () =>
-                            setCalAddOpen(false),
-                          );
-                        }
+                        const ok = await saveLink({
+                          rawUrl: urlInput,
+                          withSchedule: true,
+                          customDate: selectedDate,
+                        });
+                        if (ok) setCalAddOpen(false);
                       }}
                       className={`px-3 py-1 rounded text-xs font-bold transition ${
-                        isCalPast || isUrlInvalid
+                        isCalPast || isUrlInvalid || !urlInput.trim()
                           ? "bg-slate-400 text-white cursor-not-allowed"
                           : "bg-emerald-600 text-white hover:bg-emerald-700"
                       }`}
