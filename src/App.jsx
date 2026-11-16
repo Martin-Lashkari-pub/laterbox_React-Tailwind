@@ -76,6 +76,14 @@ export default function App() {
   const [modalShake, setModalShake] = useState(false);
   const [modalBusy, setModalBusy] = useState(false);
 
+  // Wipe-all-data modal state: null | 'confirm' | 'progress'
+  const [wipeStage, setWipeStage] = useState(null);
+  const [wipeProgress, setWipeProgress] = useState(0);
+  const [wipePass, setWipePass] = useState("");
+  const [wipeError, setWipeError] = useState("");
+  const [wipeShake, setWipeShake] = useState(false);
+  const [wipeVerifying, setWipeVerifying] = useState(false);
+
   const [view, setView] = useState("home");
   const [previousView, setPreviousView] = useState("home");
   const [folderId, setFolderId] = useState(null);
@@ -327,6 +335,85 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, [storageReady, items, prefs.sound, isPrivateMode]);
+
+  useEffect(() => {
+    if (wipeStage !== "progress") return;
+    const durationMs = 5000;
+    const startTime = Date.now();
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(100, Math.round((elapsed / durationMs) * 100));
+      setWipeProgress(pct);
+
+      if (pct >= 100) {
+        clearInterval(interval);
+        executeFullWipe();
+      }
+    }, 40);
+
+    return () => clearInterval(interval);
+  }, [wipeStage]);
+
+  const handleStartWipe = async () => {
+    if (privateMeta) {
+      if (!wipePass) {
+        setWipeError(
+          "Enter your Private Mode password to authorize full deletion.",
+        );
+        setWipeShake(false);
+        requestAnimationFrame(() => setWipeShake(true));
+        setTimeout(() => setWipeShake(false), 400);
+        return;
+      }
+      setWipeVerifying(true);
+      try {
+        const validKey = await vaultCrypto.unlock(wipePass, privateMeta);
+        if (!validKey) {
+          setWipeError("Incorrect password. Deletion denied.");
+          setWipeShake(false);
+          requestAnimationFrame(() => setWipeShake(true));
+          setTimeout(() => setWipeShake(false), 400);
+          return;
+        }
+      } finally {
+        setWipeVerifying(false);
+      }
+    }
+
+    setWipeError("");
+    setWipePass("");
+    setWipeProgress(0);
+    setWipeStage("progress");
+  };
+
+  const executeFullWipe = async () => {
+    if (typeof chrome !== "undefined" && chrome.alarms) {
+      await chrome.alarms.clearAll();
+    }
+    if (typeof chrome !== "undefined" && chrome.action) {
+      chrome.action.setBadgeText({ text: "" });
+    }
+
+    await storage.saveItems([], true);
+    await storage.savePrivateMeta(null);
+    await storage.clearDraft();
+
+    setItems([]);
+    setPrivateMeta(null);
+    setPrivateKey(null);
+    setDecryptedMap({});
+    setFolderId(null);
+    setDetailItemId(null);
+    setEditingItemId(null);
+    setUrlInput("");
+    setNoteInput("");
+    setUseReminder(false);
+    setWipeStage(null);
+    setWipeProgress(0);
+    setView("home");
+    notify("All data permanently deleted");
+  };
 
   const persistItems = async (next, allowEmpty = false) => {
     if (!storageReady) return;
@@ -1250,6 +1337,145 @@ export default function App() {
     <div
       className={`w-full h-full flex flex-col relative ${THEMES[prefs.theme]}`}
     >
+      {/* WIPE ALL DATA MODAL (Step 1: Warning + Password if Private Mode exists -> Step 2: 0–100% Cancelable Progress Bar) */}
+      {wipeStage && (
+        <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wipe-modal-title"
+            className={`w-full max-w-sm p-4 rounded-2xl border border-red-500/60 shadow-2xl space-y-3.5 ${CARD_BG[prefs.theme]} ${
+              wipeShake ? "animate-shake" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div
+                id="wipe-modal-title"
+                className="flex items-center gap-2 font-bold text-sm text-red-500"
+              >
+                <span>🗑️</span>
+                <span>
+                  {wipeStage === "confirm"
+                    ? "Delete All TabVault Data?"
+                    : "Deleting All Data..."}
+                </span>
+              </div>
+              {wipeStage === "confirm" && (
+                <button
+                  onClick={() => setWipeStage(null)}
+                  aria-label="Close"
+                  className="text-xs opacity-75 hover:opacity-100 px-1.5 py-0.5 rounded"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {wipeStage === "confirm" ? (
+              <>
+                <div className="p-3 rounded-xl bg-red-600/12 border border-red-500/35 text-xs space-y-1.5">
+                  <div className="font-bold text-red-500">
+                    ⚠️ This action cannot be undone!
+                  </div>
+                  <p className="opacity-90 leading-relaxed">
+                    All saved links, folders, scheduled reminders, and your
+                    encrypted Private Space will be permanently erased.
+                  </p>
+                </div>
+
+                {wipeError && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-2 p-2.5 rounded-lg bg-red-600/15 border border-red-500 text-red-600 text-xs font-semibold"
+                  >
+                    <span className="shrink-0">⚠️</span>
+                    <span>{wipeError}</span>
+                  </div>
+                )}
+
+                {privateMeta && (
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold opacity-85">
+                      Enter your Private Mode password to confirm:
+                    </label>
+                    <input
+                      type="password"
+                      autoFocus
+                      value={wipePass}
+                      onChange={(e) => {
+                        setWipePass(e.target.value);
+                        if (wipeError) setWipeError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleStartWipe();
+                      }}
+                      placeholder="Private Mode password..."
+                      className={`w-full px-3 py-2 text-xs rounded-lg border bg-transparent outline-none transition ${
+                        wipeError
+                          ? "border-red-500 ring-2 ring-red-500/35 bg-red-500/5"
+                          : "border-current/25 focus:border-red-500"
+                      }`}
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={wipeVerifying}
+                    onClick={handleStartWipe}
+                    className="flex-1 py-2 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition disabled:opacity-50"
+                  >
+                    {wipeVerifying ? "Verifying..." : "Yes, Delete Everything"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWipeStage(null)}
+                    className="px-3.5 py-2 rounded-lg border border-current/20 text-xs font-semibold hover:opacity-100"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs opacity-85 leading-relaxed">
+                  Erasing {items.length} items and clearing all reminders. Click{" "}
+                  <strong>Cancel Deletion</strong> before the bar reaches 100%
+                  to stop.
+                </p>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-red-500">Wiping storage...</span>
+                    <span>{wipeProgress}%</span>
+                  </div>
+                  <div className="w-full h-3.5 rounded-full bg-black/20 overflow-hidden border border-current/15 p-0.5">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-500 via-red-500 to-red-600 transition-all duration-75"
+                      style={{ width: `${wipeProgress}%` }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWipeStage(null);
+                    setWipeProgress(0);
+                    notify("Deletion cancelled — your data is safe");
+                  }}
+                  className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-md transition"
+                >
+                  Cancel Deletion (
+                  {Math.max(1, Math.ceil((100 - wipeProgress) / 20))}s left)
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* GLOBAL PRIVATE MODE MODAL */}
       {privateModal && (
         <div className="absolute inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1628,7 +1854,7 @@ export default function App() {
                   playTone(prefs.sound, 2);
                   chrome?.notifications?.create(`test_${Date.now()}`, {
                     type: "basic",
-                    iconUrl: "LaterBox-Ikon.png",
+                    iconUrl: "icon48.png",
                     title: "TabVault Test Alert",
                     message: `Sound mode: ${prefs.sound}`,
                   });
@@ -1772,10 +1998,38 @@ export default function App() {
                 />
               </div>
             </div>
+
+            {/* DANGER ZONE: Delete All Data */}
+            <div
+              className={`p-3 rounded-xl border border-red-500/35 space-y-2 ${CARD_BG[prefs.theme]}`}
+            >
+              <div className="text-xs font-bold text-red-500">Danger Zone</div>
+              <div className="text-xs opacity-75">
+                Permanently remove all links, folders, reminders, and Private
+                Mode data from this browser.
+              </div>
+              <button
+                type="button"
+                disabled={items.length === 0 && !privateMeta}
+                onClick={() => {
+                  setWipePass("");
+                  setWipeError("");
+                  setWipeShake(false);
+                  setWipeStage("confirm");
+                }}
+                className={`w-full py-2 rounded-lg text-xs font-bold transition ${
+                  items.length === 0 && !privateMeta
+                    ? "bg-slate-400/30 text-slate-400 cursor-not-allowed"
+                    : "bg-red-600/15 border border-red-500/40 text-red-500 hover:bg-red-600 hover:text-white"
+                }`}
+              >
+                Delete All Data
+              </button>
+            </div>
           </div>
         </>
       ) : view === "detail" && detailItem ? (
-        /* FULL REMINDER ALERT & DETAIL VIEW (Opens automatically when an alarm triggers) */
+        /* FULL REMINDER ALERT & DETAIL VIEW */
         <>
           <div
             className={`flex items-center justify-between px-3.5 py-2.5 border-b shrink-0 ${CARD_BG[prefs.theme]}`}
@@ -1934,7 +2188,7 @@ export default function App() {
               className="flex items-center gap-1.5 font-bold text-sm hover:opacity-90 shrink-0"
             >
               <img
-                src="LaterBox-Ikon.png"
+                src="icon48.png"
                 alt="TabVault"
                 className="w-5 h-5 rounded shrink-0"
               />

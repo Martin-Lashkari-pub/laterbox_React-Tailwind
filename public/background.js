@@ -185,7 +185,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (item.isPrivate || item.encrypted) {
     chrome.notifications.create(alarm.name, {
       type: "basic",
-      iconUrl: "LaterBox-Ikon.png",
+      iconUrl: "icon48.png",
       title: "TabVault: Private Reminder",
       message: "Switch to Private Mode in TabVault to view this reminder.",
       requireInteraction: true,
@@ -196,7 +196,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
   chrome.notifications.create(alarm.name, {
     type: "basic",
-    iconUrl: "LaterBox-Ikon.png",
+    iconUrl: "icon48.png",
     title: item.note ? `TabVault: ${item.note}` : "TabVault Reminder",
     message: item.url.split("?")[0].replace(/^https?:\/\/(www\.)?/, ""),
     requireInteraction: true,
