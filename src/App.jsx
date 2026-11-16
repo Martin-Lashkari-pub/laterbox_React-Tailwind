@@ -473,6 +473,7 @@ export default function App() {
     setNoteInput("");
     setSaveTargetFolder("");
     setUseReminder(false);
+    setCalAddOpen(false);
     setRepeatCfg(createDefaultRepeat());
     if (!isPrivateMode) await storage.clearDraft();
   };
