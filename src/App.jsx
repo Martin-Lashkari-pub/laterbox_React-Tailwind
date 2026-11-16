@@ -1603,7 +1603,7 @@ export default function App() {
                   className="w-full py-2 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 flex items-center justify-between shadow-xs"
                 >
                   <span className="truncate">
-                    Save in "{pickerBrowsedFolder.name}"
+                    Save in &quot;{pickerBrowsedFolder.name}&quot;
                   </span>
                   <span>Select ✓</span>
                 </button>
@@ -1619,7 +1619,7 @@ export default function App() {
                   </div>
                   {pickerFilteredFolders.length === 0 ? (
                     <div className="text-center text-xs opacity-70 py-6">
-                      No folders matching "{pickerSearch.trim()}"
+                      No folders matching &quot;{pickerSearch.trim()}&quot;
                     </div>
                   ) : (
                     pickerFilteredFolders.map((f) => {
@@ -2448,6 +2448,92 @@ export default function App() {
               </div>
             </div>
 
+            {/* ABOUT TABVAULT (iOS-style grouped card) */}
+            <div className="space-y-1.5 pt-1">
+              <div className="px-1 text-[11px] font-bold uppercase tracking-wider opacity-65">
+                About
+              </div>
+
+              <div
+                className={`rounded-xl border overflow-hidden ${CARD_BG[prefs.theme]}`}
+              >
+                {/* App Identity Header */}
+                <div className="flex flex-col items-center text-center p-4 border-b border-current/10">
+                  <img
+                    src="icon128.png"
+                    alt="TabVault"
+                    className="w-12 h-12 rounded-2xl shadow-sm mb-2"
+                  />
+                  <div className="text-sm font-bold">TabVault</div>
+                  <span className="mt-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-600/15 text-emerald-600">
+                    Version{" "}
+                    {typeof chrome !== "undefined" &&
+                    chrome.runtime?.getManifest
+                      ? chrome.runtime.getManifest().version
+                      : "3.0.0"}
+                  </span>
+                </div>
+
+                {/* Personal Story */}
+                <div className="p-3.5 text-xs opacity-85 leading-relaxed space-y-2 border-b border-current/10">
+                  <p className="font-bold opacity-100">
+                    Hey, welcome to TabVault!
+                  </p>
+                  <p>
+                    For a long time, I wanted a simple, clean way to keep track
+                    of my favorite websites and links I actually want to come
+                    back to. Chrome&apos;s built-in bookmarks never really
+                    worked for me — everything just piled up in messy lists, and
+                    I&apos;d forget why I saved half of them.
+                  </p>
+                  <p>
+                    So I decided to build the tool I always wished existed. With
+                    TabVault, you can organize your links into clean folders,
+                    set smart reminders so you never miss an important page or
+                    deadline, and lock away sensitive links in a
+                    password-protected Private Space encrypted locally with
+                    AES-256-GCM. Everything stays 100% on your own device — no
+                    accounts, no tracking, no cloud.
+                  </p>
+                  <p className="font-medium opacity-95">
+                    I really hope you give TabVault a shot and enjoy using it as
+                    much as I enjoyed building it!
+                  </p>
+                </div>
+
+                {/* iOS-style Grouped Links */}
+                <div className="divide-y divide-current/10 text-xs font-semibold">
+                  <a
+                    href="https://github.com/Martin-Lashkari-pub/laterbox_React-Tailwind"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between px-3.5 py-2.5 hover:bg-current/5 transition"
+                  >
+                    <span>Source Code on GitHub</span>
+                    <span className="opacity-50 text-sm">›</span>
+                  </a>
+                  <a
+                    href="https://github.com/Martin-Lashkari-pub/laterbox_React-Tailwind/blob/main/PRIVACY.md"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between px-3.5 py-2.5 hover:bg-current/5 transition"
+                  >
+                    <span>Privacy Policy</span>
+                    <span className="opacity-50 text-sm">›</span>
+                  </a>
+                  <a
+                    href="https://github.com/Martin-Lashkari-pub/laterbox_React-Tailwind/issues/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between px-3.5 py-2.5 hover:bg-current/5 transition"
+                  >
+                    <span>Report an Issue or Feedback</span>
+                    <span className="opacity-50 text-sm">›</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+
             {/* DANGER ZONE: Delete All Data */}
             <div
               className={`p-3 rounded-xl border border-red-500/35 space-y-2 ${CARD_BG[prefs.theme]}`}
@@ -3151,7 +3237,7 @@ export default function App() {
                   </div>
                   {matchingFolders.length === 0 ? (
                     <li className="text-center text-xs opacity-75 py-8">
-                      No folders matching "{folderSearch.trim()}"
+                      No folders matching &quot;{folderSearch.trim()}&quot;
                     </li>
                   ) : (
                     matchingFolders.map((folder) => {
