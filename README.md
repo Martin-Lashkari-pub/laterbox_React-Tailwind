@@ -2,6 +2,20 @@
 
 **TabVault** is a privacy-first Google Chrome extension (Manifest V3) built with React and Tailwind CSS for saving, organizing, scheduling, and encrypting browser tabs and links locally.
 
+## Screenshots
+
+|             Quick Capture & Reminders              |                   Search & Favorites                    |
+| :------------------------------------------------: | :-----------------------------------------------------: |
+| ![Quick Capture](screenshots/tabvault_store_1.png) | ![Search & Favorites](screenshots/tabvault_store_2.png) |
+
+|                   Nested Folders                    |                   Smart Calendar                    |
+| :-------------------------------------------------: | :-------------------------------------------------: |
+| ![Nested Folders](screenshots/tabvault_store_3.png) | ![Smart Calendar](screenshots/tabvault_store_4.png) |
+
+### Encrypted Private Space (AES-256-GCM)
+
+![Private Space](screenshots/tabvault_store_5.png)
+
 ## Features
 
 - **Quick Tab & Link Capture:** Save the active browser tab in one click or paste any URL with automatic title detection (including YouTube video metadata).
@@ -21,7 +35,7 @@
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/Martin-Lashkari-pub/laterbox_React-Tailwind.git
+   git clone [https://github.com/Martin-Lashkari-pub/laterbox_React-Tailwind.git](https://github.com/Martin-Lashkari-pub/laterbox_React-Tailwind.git)
    cd laterbox_React-Tailwind
    ```
 2. Install dependencies and build the extension:
